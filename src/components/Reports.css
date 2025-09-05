@@ -27,6 +27,12 @@
   color: #667eea;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .period-selector {
   display: flex;
   align-items: center;
@@ -392,5 +398,288 @@
     width: 50px;
     height: 50px;
     font-size: 1.2rem;
+  }
+}
+
+/* Monthly Trends Chart */
+.monthly-trends-chart {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.chart-header {
+  margin-bottom: 2rem;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.legend-color.sales {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.legend-color.maintenance {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+}
+
+.legend-color.revenue {
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+}
+
+.chart-container {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  height: 200px;
+  padding: 1rem 0;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.chart-bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.chart-bars {
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  height: 80%;
+  width: 100%;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 8px;
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.chart-bar.sales {
+  background: linear-gradient(to top, #667eea, #764ba2);
+}
+
+.chart-bar.maintenance {
+  background: linear-gradient(to top, #f093fb, #f5576c);
+}
+
+.chart-bar.revenue {
+  background: linear-gradient(to top, #4facfe, #00f2fe);
+}
+
+.chart-bar:hover {
+  opacity: 0.8;
+  transform: scaleY(1.05);
+}
+
+.chart-month {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #666;
+  text-align: center;
+}
+
+/* Top Items Sections */
+.top-items {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.top-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.top-item:last-child {
+  border-bottom: none;
+}
+
+.item-rank {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.top-items.maintenance .item-rank {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+}
+
+.item-info {
+  flex: 1;
+}
+
+.item-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.item-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.item-chart {
+  width: 100px;
+  height: 8px;
+  background: #f1f3f4;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.item-bar {
+  height: 100%;
+  background: linear-gradient(to right, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.item-bar.maintenance {
+  background: linear-gradient(to right, #f093fb, #f5576c);
+}
+
+/* Maintenance Analysis */
+.maintenance-analysis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.analysis-subsection {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.analysis-subsection h3 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+  font-size: 1.2rem;
+  border-bottom: 2px solid #f1f3f4;
+  padding-bottom: 0.5rem;
+}
+
+.customer-stats, .device-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.customer-item, .device-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.customer-name, .device-name {
+  flex: 1;
+  font-weight: 500;
+  color: #333;
+}
+
+.customer-count, .device-count {
+  font-size: 0.9rem;
+  color: #666;
+  min-width: 60px;
+}
+
+.customer-bar, .device-bar {
+  width: 80px;
+  height: 6px;
+  background: #f1f3f4;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.customer-fill, .device-fill {
+  height: 100%;
+  background: linear-gradient(to right, #28a745, #20c997);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cost-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.cost-item {
+  text-align: center;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.cost-status {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.cost-amount {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Additional responsive styles */
+@media (max-width: 768px) {
+  .chart-container {
+    height: 150px;
+  }
+  
+  .chart-legend {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .top-items {
+    padding: 1rem;
+  }
+  
+  .item-stats {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .maintenance-analysis {
+    grid-template-columns: 1fr;
   }
 }

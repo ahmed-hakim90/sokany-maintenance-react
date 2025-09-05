@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { migrateInventoryData } from '../utils/migrateData';
 import type { InventoryItem, Center } from '../types';
 import './InventoryManagement.css';
 
@@ -39,24 +40,44 @@ const InventoryManagement: React.FC = () => {
 
   const loadItems = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'inventory'));
-      const itemsData: InventoryItem[] = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        itemsData.push({
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date()
-        } as InventoryItem);
-      });
-
-      // Filter items based on user role
-      const filteredItems = user?.isAdmin 
-        ? itemsData 
-        : itemsData.filter(item => item.centerId === user?.centerId);
+      let itemsData: InventoryItem[] = [];
       
-      setItems(filteredItems);
+      if (user?.isAdmin) {
+        // الأدمن يرى جميع المنتجات من جميع المراكز
+        const centersSnapshot = await getDocs(collection(db, 'centers'));
+        for (const centerDoc of centersSnapshot.docs) {
+          const inventorySnapshot = await getDocs(
+            collection(db, 'centers', centerDoc.id, 'inventory')
+          );
+          inventorySnapshot.forEach(doc => {
+            const data = doc.data();
+            itemsData.push({
+              id: doc.id,
+              ...data,
+              centerId: centerDoc.id,
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date()
+            } as InventoryItem);
+          });
+        }
+      } else if (user?.centerId) {
+        // مدير المركز يرى منتجات مركزه فقط
+        const inventorySnapshot = await getDocs(
+          collection(db, 'centers', user.centerId, 'inventory')
+        );
+        inventorySnapshot.forEach(doc => {
+          const data = doc.data();
+          itemsData.push({
+            id: doc.id,
+            ...data,
+            centerId: user.centerId,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date()
+          } as InventoryItem);
+        });
+      }
+      
+      setItems(itemsData);
     } catch (error) {
       console.error('Error loading items:', error);
     }
@@ -89,6 +110,11 @@ const InventoryManagement: React.FC = () => {
         return;
       }
 
+      if (!formData.centerId) {
+        showNotification('يرجى اختيار المركز', 'error');
+        return;
+      }
+
       const itemData = {
         name: formData.name,
         quantity: formData.quantity,
@@ -99,10 +125,12 @@ const InventoryManagement: React.FC = () => {
       };
 
       if (editingItem) {
-        await updateDoc(doc(db, 'inventory', editingItem.id), itemData);
+        // تحديث في البنية الجديدة: centers/{centerId}/inventory
+        await updateDoc(doc(db, 'centers', formData.centerId, 'inventory', editingItem.id), itemData);
         showNotification('تم تحديث الصنف بنجاح', 'success');
       } else {
-        await addDoc(collection(db, 'inventory'), {
+        // إضافة في البنية الجديدة: centers/{centerId}/inventory
+        await addDoc(collection(db, 'centers', formData.centerId, 'inventory'), {
           ...itemData,
           createdAt: new Date()
         });
@@ -129,10 +157,11 @@ const InventoryManagement: React.FC = () => {
     setShowAddForm(true);
   };
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = async (item: InventoryItem) => {
     if (window.confirm('هل أنت متأكد من حذف هذا الصنف؟')) {
       try {
-        await deleteDoc(doc(db, 'inventory', itemId));
+        // حذف من البنية الجديدة: centers/{centerId}/inventory
+        await deleteDoc(doc(db, 'centers', item.centerId, 'inventory', item.id));
         showNotification('تم حذف الصنف بنجاح', 'success');
         loadItems();
       } catch (error) {
@@ -159,6 +188,27 @@ const InventoryManagement: React.FC = () => {
     return center?.name || 'غير محدد';
   };
 
+  const handleMigrateData = async () => {
+    if (!user?.isAdmin) return;
+    
+    if (window.confirm('هل تريد نقل البيانات من النظام القديم؟ هذا العمل لا يمكن التراجع عنه.')) {
+      setLoading(true);
+      try {
+        const result = await migrateInventoryData();
+        if (result && result.success) {
+          showNotification(`تم نقل ${result.migratedCount} عنصر بنجاح`, 'success');
+          loadItems();
+        } else {
+          showNotification('حدث خطأ في عملية النقل', 'error');
+        }
+      } catch (error) {
+        showNotification('حدث خطأ في عملية النقل', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -175,13 +225,25 @@ const InventoryManagement: React.FC = () => {
           <i className="fas fa-boxes"></i>
           إدارة المخزون
         </h1>
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddForm(true)}
-        >
-          <i className="fas fa-plus"></i>
-          إضافة صنف جديد
-        </button>
+        <div className="header-actions">
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowAddForm(true)}
+          >
+            <i className="fas fa-plus"></i>
+            إضافة صنف جديد
+          </button>
+          {user?.isAdmin && (
+            <button 
+              className="btn btn-secondary"
+              onClick={handleMigrateData}
+              style={{ marginLeft: '10px' }}
+            >
+              <i className="fas fa-sync-alt"></i>
+              نقل البيانات القديمة
+            </button>
+          )}
+        </div>
       </div>
 
       {notification && (
@@ -299,7 +361,7 @@ const InventoryManagement: React.FC = () => {
                   </button>
                   <button 
                     className="btn-icon delete"
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => handleDelete(item)}
                     title="حذف"
                   >
                     <i className="fas fa-trash"></i>

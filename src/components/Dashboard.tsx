@@ -3,10 +3,11 @@ import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import InventoryManagement from './InventoryManagement';
-import UserManagement from './UserManagement';
 import CenterManagement from './CenterManagement';
 import SalesManagement from './SalesManagement';
-import MaintenanceManagement from './MaintenanceManagement';
+import MaintenanceManagementNew from './MaintenanceManagementNew';
+import TechnicianManagement from './TechnicianManagement';
+import CustomerManagement from './CustomerManagement';
 import Reports from './Reports';
 // DataManager تمت إزالتها (البيانات التجريبية حذفت)
 import SessionInfo from './SessionInfo';
@@ -71,9 +72,11 @@ const Dashboard: React.FC = () => {
       case 'sales':
         return <SalesManagement />;
       case 'maintenance':
-        return <MaintenanceManagement />;
-      case 'users':
-        return <UserManagement />;
+        return <MaintenanceManagementNew />;
+      case 'technicians':
+        return <TechnicianManagement />;
+      case 'customers':
+        return <CustomerManagement />;
       case 'centers':
         return <CenterManagement />;
       case 'reports':
@@ -118,6 +121,26 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
+          <div className="card" onClick={() => handleNavigation('technicians')}>
+            <div className="card-icon">
+              <i className="fas fa-user-cog"></i>
+            </div>
+            <div className="card-content">
+              <h3>إدارة الفنيين</h3>
+              <p>إضافة وإدارة الفنيين</p>
+            </div>
+          </div>
+
+          <div className="card" onClick={() => handleNavigation('customers')}>
+            <div className="card-icon">
+              <i className="fas fa-users"></i>
+            </div>
+            <div className="card-content">
+              <h3>إدارة العملاء</h3>
+              <p>إضافة وإدارة العملاء</p>
+            </div>
+          </div>
+
           {user?.isAdmin && (
             <>
               <div className="card" onClick={() => handleNavigation('centers')}>
@@ -127,16 +150,6 @@ const Dashboard: React.FC = () => {
                 <div className="card-content">
                   <h3>إدارة المراكز</h3>
                   <p>إضافة وإدارة المراكز</p>
-                </div>
-              </div>
-
-              <div className="card" onClick={() => handleNavigation('users')}>
-                <div className="card-icon">
-                  <i className="fas fa-users"></i>
-                </div>
-                <div className="card-content">
-                  <h3>إدارة المستخدمين</h3>
-                  <p>إضافة وإدارة المستخدمين</p>
                 </div>
               </div>
 
@@ -214,6 +227,20 @@ const Dashboard: React.FC = () => {
             <i className="fas fa-tools"></i>
             الصيانة
           </button>
+          <button 
+            className={`nav-btn ${activeSection === 'technicians' ? 'active' : ''}`}
+            onClick={() => handleNavigation('technicians')}
+          >
+            <i className="fas fa-user-cog"></i>
+            الفنيين
+          </button>
+          <button 
+            className={`nav-btn ${activeSection === 'customers' ? 'active' : ''}`}
+            onClick={() => handleNavigation('customers')}
+          >
+            <i className="fas fa-address-book"></i>
+            العملاء
+          </button>
           {user?.isAdmin && (
             <>
               <button 
@@ -222,13 +249,6 @@ const Dashboard: React.FC = () => {
               >
                 <i className="fas fa-building"></i>
                 المراكز
-              </button>
-              <button 
-                className={`nav-btn ${activeSection === 'users' ? 'active' : ''}`}
-                onClick={() => handleNavigation('users')}
-              >
-                <i className="fas fa-users"></i>
-                المستخدمين
               </button>
               <button 
                 className={`nav-btn ${activeSection === 'reports' ? 'active' : ''}`}

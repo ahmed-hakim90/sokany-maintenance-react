@@ -60,6 +60,10 @@ export interface MaintenanceRecord {
   createdAt?: Date;
   updatedAt?: Date;
   updatedBy?: string;
+  // الحقول الجديدة
+  technicianId?: string;    // معرف الفني
+  isWarranty?: boolean;     // فترة الضمان
+  customerId?: string;      // معرف العميل
 }
 
 export type MaintenanceStatus = 
@@ -81,4 +85,90 @@ export interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
+}
+
+// واجهة الفني
+export interface Technician {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  centerId: string;
+  centerName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// واجهة العميل
+export interface Customer {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  type: 'distributor' | 'consumer';  // موزع أو مستهلك
+  centerId: string;
+  centerName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// واجهة طلب الصيانة الجديدة (محدثة)
+export interface MaintenanceRequest {
+  id: string;
+  customerName: string;
+  phoneNumber?: string;
+  deviceType: string;
+  description: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
+  centerId: string;
+  centerName?: string;
+  technicianId?: string;
+  technicianName?: string;
+  customerId?: string;
+  isWarranty?: boolean;
+  parts?: Array<{
+    itemId: string;
+    itemName: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  totalCost?: number;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt?: Date;
+  // دورة حياة الطلب
+  lifecycle: MaintenanceLifecycleEntry[];
+}
+
+// تتبع دورة حياة طلب الصيانة
+export interface MaintenanceLifecycleEntry {
+  id: string;
+  timestamp: Date;
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
+  action: string; // وصف العملية
+  performedBy: string; // من قام بالعملية
+  notes?: string;
+  technicianAssigned?: string; // الفني المُعين
+}
+
+// سجل جلسة المركز
+export interface CenterSession {
+  id: string;
+  centerId: string;
+  centerName: string;
+  sessionStart: Date;
+  sessionEnd?: Date;
+  isActive: boolean;
+  activities: CenterActivityLog[];
+}
+
+// سجل أنشطة المركز
+export interface CenterActivityLog {
+  id: string;
+  timestamp: Date;
+  activityType: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'login' | 'logout';
+  action: string; // وصف العملية
+  targetId?: string; // معرف السجل المتأثر
+  targetName?: string; // اسم السجل المتأثر
+  performedBy: string; // البريد الإلكتروني للمستخدم
+  details?: any; // تفاصيل إضافية
 }

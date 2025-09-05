@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import type { InventoryItem, Sale, MaintenanceRecord, Center } from '../types';
+import type { InventoryItem, Sale, MaintenanceRecord, Center, Technician, Customer, MaintenanceRequest } from '../types';
 import './Reports.css';
 
 interface ReportStats {
@@ -13,6 +13,8 @@ interface ReportStats {
   pendingMaintenance: number;
   lowStockItems: number;
   totalRevenue: number;
+  totalTechnicians: number;
+  totalCustomers: number;
   centerStats: {
     [centerId: string]: {
       centerName: string;
@@ -20,19 +22,48 @@ interface ReportStats {
       sales: number;
       maintenance: number;
       revenue: number;
+      technicians: number;
+      customers: number;
     };
   };
   technicianStats: {
     [technicianName: string]: {
       completed: number;
       pending: number;
+      inProgress: number;
+    };
+  };
+  customerStats: {
+    [customerName: string]: {
+      totalPurchases: number;
+      totalSpent: number;
+      maintenanceRequests: number;
+      type: string;
     };
   };
   maintenanceByStatus: {
     [status: string]: number;
   };
+  warrantyStats: {
+    inWarranty: number;
+    outOfWarranty: number;
+  };
   partsUsed: {
     [itemName: string]: number;
+  };
+  topSellingItems: {
+    [itemName: string]: { quantity: number; revenue: number };
+  };
+  topMaintenanceItems: {
+    [itemName: string]: number;
+  };
+  monthlyTrends: {
+    [month: string]: { sales: number; maintenance: number; revenue: number };
+  };
+  maintenanceDetails: {
+    byCustomer: { [customerName: string]: number };
+    byDevice: { [deviceName: string]: number };
+    estimatedCosts: { [status: string]: number };
   };
 }
 
@@ -46,10 +77,25 @@ const Reports: React.FC = () => {
     pendingMaintenance: 0,
     lowStockItems: 0,
     totalRevenue: 0,
+    totalTechnicians: 0,
+    totalCustomers: 0,
     centerStats: {},
     technicianStats: {},
+    customerStats: {},
     maintenanceByStatus: {},
-    partsUsed: {}
+    warrantyStats: {
+      inWarranty: 0,
+      outOfWarranty: 0
+    },
+    partsUsed: {},
+    topSellingItems: {},
+    topMaintenanceItems: {},
+    monthlyTrends: {},
+    maintenanceDetails: {
+      byCustomer: {},
+      byDevice: {},
+      estimatedCosts: {}
+    }
   });
   const [loading, setLoading] = useState(true);
   const [centers, setCenters] = useState<Center[]>([]);
@@ -155,6 +201,8 @@ const Reports: React.FC = () => {
       const snapshot = await getDocs(salesQuery);
       const sales: Sale[] = [];
       let totalRevenue = 0;
+      const topSellingItems: { [itemName: string]: { quantity: number; revenue: number } } = {};
+      const monthlyTrends: { [month: string]: { sales: number; maintenance: number; revenue: number } } = {};
       
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -173,12 +221,29 @@ const Reports: React.FC = () => {
         
         sales.push(sale);
         totalRevenue += sale.totalPrice;
+
+        // Calculate top selling items
+        if (!topSellingItems[sale.itemName]) {
+          topSellingItems[sale.itemName] = { quantity: 0, revenue: 0 };
+        }
+        topSellingItems[sale.itemName].quantity += sale.quantity;
+        topSellingItems[sale.itemName].revenue += sale.totalPrice;
+
+        // Calculate monthly trends
+        const monthKey = sale.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+        if (!monthlyTrends[monthKey]) {
+          monthlyTrends[monthKey] = { sales: 0, maintenance: 0, revenue: 0 };
+        }
+        monthlyTrends[monthKey].sales++;
+        monthlyTrends[monthKey].revenue += sale.totalPrice;
       });
 
       setStats(prevStats => ({
         ...prevStats,
         totalSales: sales.length,
-        totalRevenue
+        totalRevenue,
+        topSellingItems,
+        monthlyTrends: { ...prevStats.monthlyTrends, ...monthlyTrends }
       }));
 
       // Calculate center-wise sales stats
@@ -222,6 +287,12 @@ const Reports: React.FC = () => {
 
       const snapshot = await getDocs(maintenanceQuery);
       const maintenanceRecords: MaintenanceRecord[] = [];
+      const topMaintenanceItems: { [itemName: string]: number } = {};
+      const maintenanceDetails = {
+        byCustomer: {} as { [customerName: string]: number },
+        byDevice: {} as { [deviceName: string]: number },
+        estimatedCosts: {} as { [status: string]: number }
+      };
       
       snapshot.forEach(doc => {
         const data = doc.data();
@@ -239,6 +310,28 @@ const Reports: React.FC = () => {
         }
         
         maintenanceRecords.push(maintenance);
+
+        // Calculate top maintenance items
+        topMaintenanceItems[maintenance.itemName] = (topMaintenanceItems[maintenance.itemName] || 0) + maintenance.quantity;
+
+        // Calculate maintenance details
+        maintenanceDetails.byCustomer[maintenance.customerName] = (maintenanceDetails.byCustomer[maintenance.customerName] || 0) + 1;
+        maintenanceDetails.byDevice[maintenance.deviceName] = (maintenanceDetails.byDevice[maintenance.deviceName] || 0) + 1;
+        
+        if (maintenance.estimatedCost) {
+          maintenanceDetails.estimatedCosts[maintenance.status] = (maintenanceDetails.estimatedCosts[maintenance.status] || 0) + maintenance.estimatedCost;
+        }
+
+        // Add to monthly trends
+        const monthKey = maintenance.date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
+        setStats(prevStats => {
+          const updatedTrends = { ...prevStats.monthlyTrends };
+          if (!updatedTrends[monthKey]) {
+            updatedTrends[monthKey] = { sales: 0, maintenance: 0, revenue: 0 };
+          }
+          updatedTrends[monthKey].maintenance++;
+          return { ...prevStats, monthlyTrends: updatedTrends };
+        });
       });
 
       const completedMaintenance = maintenanceRecords.filter(m => m.status === 'تم الصيانة').length;
@@ -276,7 +369,9 @@ const Reports: React.FC = () => {
         pendingMaintenance,
         technicianStats,
         maintenanceByStatus,
-        partsUsed
+        partsUsed,
+        topMaintenanceItems,
+        maintenanceDetails
       }));
 
       // Calculate center-wise maintenance stats
@@ -323,17 +418,27 @@ const Reports: React.FC = () => {
           <i className="fas fa-chart-bar"></i>
           التقارير والإحصائيات
         </h1>
-        <div className="period-selector">
-          <label>الفترة الزمنية:</label>
-          <select
-            value={selectedPeriod}
-            onChange={(e) => setSelectedPeriod(e.target.value)}
+        <div className="header-actions">
+          <div className="period-selector">
+            <label>الفترة الزمنية:</label>
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+            >
+              <option value="all">جميع الفترات</option>
+              <option value="week">الأسبوع الماضي</option>
+              <option value="month">الشهر الماضي</option>
+              <option value="year">السنة الماضية</option>
+            </select>
+          </div>
+          <button 
+            className="btn btn-primary"
+            onClick={loadReportsData}
+            disabled={loading}
           >
-            <option value="all">جميع الفترات</option>
-            <option value="week">الأسبوع الماضي</option>
-            <option value="month">الشهر الماضي</option>
-            <option value="year">السنة الماضية</option>
-          </select>
+            <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+            {loading ? 'جاري التحديث...' : 'تحديث التقارير'}
+          </button>
         </div>
       </div>
 
@@ -380,6 +485,204 @@ const Reports: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Monthly Trends Chart */}
+      {Object.keys(stats.monthlyTrends).length > 0 && (
+        <div className="section">
+          <h2>الاتجاهات الشهرية</h2>
+          <div className="monthly-trends-chart">
+            <div className="chart-header">
+              <div className="chart-legend">
+                <div className="legend-item">
+                  <span className="legend-color sales"></span>
+                  <span>المبيعات</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color maintenance"></span>
+                  <span>الصيانة</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color revenue"></span>
+                  <span>الإيرادات</span>
+                </div>
+              </div>
+            </div>
+            <div className="chart-container">
+              {Object.entries(stats.monthlyTrends)
+                .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+                .slice(-6)
+                .map(([month, data]) => {
+                  const maxValue = Math.max(
+                    ...Object.values(stats.monthlyTrends).map(d => Math.max(d.sales, d.maintenance, d.revenue / 100))
+                  );
+                  return (
+                    <div key={month} className="chart-bar-group">
+                      <div className="chart-bars">
+                        <div 
+                          className="chart-bar sales"
+                          style={{ height: `${(data.sales / maxValue) * 100}%` }}
+                          title={`مبيعات: ${data.sales}`}
+                        ></div>
+                        <div 
+                          className="chart-bar maintenance"
+                          style={{ height: `${(data.maintenance / maxValue) * 100}%` }}
+                          title={`صيانة: ${data.maintenance}`}
+                        ></div>
+                        <div 
+                          className="chart-bar revenue"
+                          style={{ height: `${((data.revenue / 100) / maxValue) * 100}%` }}
+                          title={`إيرادات: ${data.revenue.toFixed(0)}`}
+                        ></div>
+                      </div>
+                      <div className="chart-month">{month.split(' ')[1]}</div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Selling Items */}
+      {Object.keys(stats.topSellingItems).length > 0 && (
+        <div className="section">
+          <h2>أعلى الأصناف مبيعاً</h2>
+          <div className="top-items">
+            {Object.entries(stats.topSellingItems)
+              .sort(([, a], [, b]) => b.quantity - a.quantity)
+              .slice(0, 10)
+              .map(([itemName, data], index) => (
+                <div key={itemName} className="top-item">
+                  <div className="item-rank">#{index + 1}</div>
+                  <div className="item-info">
+                    <div className="item-name">{itemName}</div>
+                    <div className="item-stats">
+                      <span className="quantity">الكمية: {data.quantity}</span>
+                      <span className="revenue">الإيراد: {data.revenue.toFixed(2)} جنيه</span>
+                    </div>
+                  </div>
+                  <div className="item-chart">
+                    <div 
+                      className="item-bar"
+                      style={{ 
+                        width: `${(data.quantity / Object.values(stats.topSellingItems)[0].quantity) * 100}%`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Top Maintenance Items */}
+      {Object.keys(stats.topMaintenanceItems).length > 0 && (
+        <div className="section">
+          <h2>أعلى الأصناف في طلبات الصيانة</h2>
+          <div className="top-items maintenance">
+            {Object.entries(stats.topMaintenanceItems)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 10)
+              .map(([itemName, quantity], index) => (
+                <div key={itemName} className="top-item">
+                  <div className="item-rank">#{index + 1}</div>
+                  <div className="item-info">
+                    <div className="item-name">{itemName}</div>
+                    <div className="item-stats">
+                      <span className="quantity">مستخدم في {quantity} طلب صيانة</span>
+                    </div>
+                  </div>
+                  <div className="item-chart">
+                    <div 
+                      className="item-bar maintenance"
+                      style={{ 
+                        width: `${(quantity / Object.values(stats.topMaintenanceItems)[0]) * 100}%`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Detailed Maintenance Analysis */}
+      {stats.totalMaintenance > 0 && (
+        <div className="section">
+          <h2>تحليل تفصيلي لطلبات الصيانة</h2>
+          <div className="maintenance-analysis">
+            
+            {/* By Customer */}
+            {Object.keys(stats.maintenanceDetails.byCustomer).length > 0 && (
+              <div className="analysis-subsection">
+                <h3>حسب العملاء</h3>
+                <div className="customer-stats">
+                  {Object.entries(stats.maintenanceDetails.byCustomer)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 8)
+                    .map(([customerName, count]) => (
+                      <div key={customerName} className="customer-item">
+                        <span className="customer-name">{customerName}</span>
+                        <span className="customer-count">{count} طلب</span>
+                        <div className="customer-bar">
+                          <div 
+                            className="customer-fill"
+                            style={{ 
+                              width: `${(count / Math.max(...Object.values(stats.maintenanceDetails.byCustomer))) * 100}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* By Device */}
+            {Object.keys(stats.maintenanceDetails.byDevice).length > 0 && (
+              <div className="analysis-subsection">
+                <h3>حسب نوع الجهاز</h3>
+                <div className="device-stats">
+                  {Object.entries(stats.maintenanceDetails.byDevice)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 8)
+                    .map(([deviceName, count]) => (
+                      <div key={deviceName} className="device-item">
+                        <span className="device-name">{deviceName}</span>
+                        <span className="device-count">{count} جهاز</span>
+                        <div className="device-bar">
+                          <div 
+                            className="device-fill"
+                            style={{ 
+                              width: `${(count / Math.max(...Object.values(stats.maintenanceDetails.byDevice))) * 100}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Estimated Costs by Status */}
+            {Object.keys(stats.maintenanceDetails.estimatedCosts).length > 0 && (
+              <div className="analysis-subsection">
+                <h3>التكاليف المقدرة حسب الحالة</h3>
+                <div className="cost-stats">
+                  {Object.entries(stats.maintenanceDetails.estimatedCosts).map(([status, cost]) => (
+                    <div key={status} className="cost-item">
+                      <div className="cost-status" style={{ color: getStatusColor(status) }}>
+                        {status}
+                      </div>
+                      <div className="cost-amount">{cost.toFixed(2)} جنيه</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Center Stats */}
       {currentUser?.isAdmin && Object.keys(stats.centerStats).length > 0 && (

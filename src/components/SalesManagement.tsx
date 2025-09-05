@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import type { Sale, InventoryItem } from '../types';
+import type { Sale, InventoryItem, Customer } from '../types';
 import './SalesManagement.css';
 
 interface NewSale {
@@ -20,6 +20,7 @@ interface NewSale {
   quantity: number;
   customerName: string;
   customerPhone: string;
+  customerId?: string;
   unitPrice: number;
   totalPrice: number;
   note?: string;
@@ -29,6 +30,7 @@ const SalesManagement: React.FC = () => {
   const { user, updateLastActivity } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [notification, setNotification] = useState<{
@@ -42,6 +44,7 @@ const SalesManagement: React.FC = () => {
     quantity: 1,
     customerName: '',
     customerPhone: '',
+    customerId: '',
     unitPrice: 0,
     totalPrice: 0,
     note: ''
@@ -51,6 +54,7 @@ const SalesManagement: React.FC = () => {
     if (!user) return; // انتظر حتى تتوفر بيانات المستخدم
     loadSales();
     loadInventoryItems();
+    loadCustomers();
     updateLastActivity();
   }, [user]);
 
@@ -105,6 +109,11 @@ const SalesManagement: React.FC = () => {
     try {
       let items: InventoryItem[] = [];
 
+      if (!user) {
+        console.log('لا يوجد مستخدم مسجل دخول');
+        return;
+      }
+
       // احصل على جميع المراكز (للأدمن أو لتسمية مركز المستخدم فقط)
       const centersMap: Record<string, string> = {};
       const centersSnapshot = await getDocs(collection(db, 'centers'));
@@ -113,34 +122,113 @@ const SalesManagement: React.FC = () => {
         centersMap[c.id] = data.name || 'مركز غير معروف';
       });
 
+      console.log('=== تشخيص تحميل المخزون ===');
+      console.log('المستخدم:', user?.email, 'نوع:', user?.isAdmin ? 'أدمن' : 'مركز');
+      console.log('تم العثور على', centersSnapshot.size, 'مراكز');
+      console.log('أسماء المراكز:', Object.values(centersMap));
+
       if (user?.isAdmin) {
+        console.log('تحميل المخزون للأدمن من جميع المراكز');
         for (const centerDoc of centersSnapshot.docs) {
+          console.log(`\n--- فحص المركز: ${centerDoc.id} (${centersMap[centerDoc.id]}) ---`);
+          
           const inventorySnapshot = await getDocs(
             collection(db, 'centers', centerDoc.id, 'inventory')
           );
+          console.log(`عدد العناصر في هذا المركز: ${inventorySnapshot.size}`);
+          
           inventorySnapshot.forEach(inv => {
             const data: any = inv.data();
-            items.push({ id: inv.id, ...data, centerName: centersMap[centerDoc.id] } as InventoryItem);
+            console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
+            items.push({ 
+              id: inv.id, 
+              ...data, 
+              centerId: centerDoc.id, // تأكد من إضافة centerId الصحيح
+              centerName: centersMap[centerDoc.id] 
+            } as InventoryItem);
           });
         }
       } else if (user?.centerId) {
+        console.log('تحميل المخزون لمركز:', user.centerId);
         const inventorySnapshot = await getDocs(
           collection(db, 'centers', user.centerId, 'inventory')
         );
+        console.log(`المركز ${user.centerId}: ${inventorySnapshot.size} عناصر`);
         inventorySnapshot.forEach(inv => {
           const data: any = inv.data();
-            items.push({ id: inv.id, ...data, centerName: centersMap[user.centerId!] } as InventoryItem);
+          console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
+          items.push({ 
+            id: inv.id, 
+            ...data, 
+            centerId: user.centerId!, // تأكد من إضافة centerId الصحيح
+            centerName: centersMap[user.centerId!] 
+          } as InventoryItem);
         });
       }
 
-      // صف وترتيب حسب اسم المركز ثم اسم المنتج لتسهيل الاختيار
-      items = items.filter(i => i.quantity > 0)
-        .sort((a, b) => `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar')); 
+      console.log('\n=== ملخص النتائج ===');
+      console.log('إجمالي العناصر المحملة:', items.length);
+      
+      // عرض تفاصيل كل عنصر
+      items.forEach((item, index) => {
+        console.log(`${index + 1}. العنصر: ${item.name}, الكمية: ${item.quantity}, المركز: ${item.centerName}, centerId: ${item.centerId}`);
+      });
 
-      setInventoryItems(items);
+      // صف وترتيب حسب اسم المركز ثم اسم المنتج لتسهيل الاختيار
+      const filteredItems = items.filter(i => i.quantity > 0);
+      console.log('العناصر بعد فلترة الكمية (> 0):', filteredItems.length);
+      
+      const sortedItems = filteredItems.sort((a, b) => 
+        `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar')
+      );
+
+      setInventoryItems(sortedItems);
     } catch (error) {
       console.error('Error loading inventory:', error);
-      showNotification('خطأ في تحميل المخزون', 'error');
+      showNotification('خطأ في تحميل المخزون: ' + (error as any).message, 'error');
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      let customersData: Customer[] = [];
+      
+      if (user?.isAdmin) {
+        const centersSnapshot = await getDocs(collection(db, 'centers'));
+        for (const centerDoc of centersSnapshot.docs) {
+          const customersSnapshot = await getDocs(
+            collection(db, 'centers', centerDoc.id, 'customers')
+          );
+          customersSnapshot.forEach(doc => {
+            const data = doc.data();
+            customersData.push({
+              id: doc.id,
+              ...data,
+              centerId: centerDoc.id,
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date()
+            } as Customer);
+          });
+        }
+      } else if (user?.centerId) {
+        const customersSnapshot = await getDocs(
+          collection(db, 'centers', user.centerId, 'customers')
+        );
+        customersSnapshot.forEach(doc => {
+          const data = doc.data();
+          customersData.push({
+            id: doc.id,
+            ...data,
+            centerId: user.centerId,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date()
+          } as Customer);
+        });
+      }
+      
+      setCustomers(customersData);
+    } catch (error) {
+      console.error('Error loading customers:', error);
     }
   };
 
@@ -229,10 +317,23 @@ const SalesManagement: React.FC = () => {
       quantity: 1,
       customerName: '',
       customerPhone: '',
+      customerId: '',
       unitPrice: 0,
       totalPrice: 0,
       note: ''
     });
+  };
+
+  const selectCustomer = (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (customer) {
+      setNewSale(prev => ({
+        ...prev,
+        customerId: customerId,
+        customerName: customer.name,
+        customerPhone: customer.phoneNumber
+      }));
+    }
   };
 
   const formatDate = (date: any) => {
@@ -270,7 +371,10 @@ const SalesManagement: React.FC = () => {
           <div className="header-actions">
             <button 
               className="btn-primary"
-              onClick={() => setShowAddForm(true)}
+              onClick={() => {
+                setShowAddForm(true);
+                loadInventoryItems(); // تحديث المخزون عند فتح النموذج
+              }}
             >
               <i className="fas fa-plus"></i>
               إضافة بيع جديد
@@ -281,7 +385,15 @@ const SalesManagement: React.FC = () => {
               disabled={loading}
             >
               <i className="fas fa-sync-alt"></i>
-              تحديث
+              تحديث المبيعات
+            </button>
+            <button 
+              className="btn-secondary"
+              onClick={loadInventoryItems}
+              disabled={loading}
+            >
+              <i className="fas fa-boxes"></i>
+              تحديث المخزون
             </button>
           </div>
         </div>
@@ -344,7 +456,9 @@ const SalesManagement: React.FC = () => {
                     onChange={(e) => handleItemSelect(e.target.value)}
                     required
                   >
-                    <option value="">اختر المنتج</option>
+                    <option value="">
+                      {inventoryItems.length === 0 ? 'لا توجد منتجات متوفرة' : 'اختر المنتج'}
+                    </option>
                     {inventoryItems.map(item => (
                       <option key={item.id} value={item.id}>
                         {item.name} | {item.centerName || 'مركز'} | متوفر: {item.quantity} | {formatCurrency(item.price)}
@@ -363,6 +477,23 @@ const SalesManagement: React.FC = () => {
                     onChange={(e) => handleQuantityChange(Number(e.target.value))}
                     required
                   />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>اختيار عميل موجود</label>
+                  <select 
+                    value={newSale.customerId || ''}
+                    onChange={(e) => selectCustomer(e.target.value)}
+                  >
+                    <option value="">عميل جديد</option>
+                    {customers.map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name} - {customer.phoneNumber}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

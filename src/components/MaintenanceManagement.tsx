@@ -121,31 +121,84 @@ const MaintenanceManagement: React.FC = () => {
     try {
       let items: InventoryItem[] = [];
 
+      if (!user) {
+        console.log('لا يوجد مستخدم مسجل دخول');
+        return;
+      }
+
+      // احصل على خريطة أسماء المراكز
+      const centersMap: Record<string, string> = {};
+      const centersSnapshot = await getDocs(collection(db, 'centers'));
+      centersSnapshot.forEach(c => {
+        const data: any = c.data();
+        centersMap[c.id] = data.name || 'مركز غير معروف';
+      });
+
+      console.log('=== تشخيص تحميل المخزون (الصيانة) ===');
+      console.log('المستخدم:', user?.email, 'نوع:', user?.isAdmin ? 'أدمن' : 'مركز');
+      console.log('تم العثور على', centersSnapshot.size, 'مراكز');
+
       if (user?.isAdmin) {
+        console.log('تحميل المخزون للأدمن من جميع المراكز');
         // الأدمن يرى جميع المنتجات من جميع المراكز
-        const centersSnapshot = await getDocs(collection(db, 'centers'));
         for (const centerDoc of centersSnapshot.docs) {
+          console.log(`\n--- فحص المركز: ${centerDoc.id} (${centersMap[centerDoc.id]}) ---`);
+          
           const inventorySnapshot = await getDocs(
             collection(db, 'centers', centerDoc.id, 'inventory')
           );
+          console.log(`عدد العناصر في هذا المركز: ${inventorySnapshot.size}`);
+          
           inventorySnapshot.forEach(doc => {
-            items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+            const data: any = doc.data();
+            console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
+            items.push({ 
+              id: doc.id, 
+              ...data, 
+              centerId: centerDoc.id, // تأكد من إضافة centerId الصحيح
+              centerName: centersMap[centerDoc.id] 
+            } as InventoryItem);
           });
         }
-      } else {
+      } else if (user?.centerId) {
+        console.log('تحميل المخزون لمركز:', user.centerId);
         // مدير المركز يرى منتجات مركزه فقط
         const inventorySnapshot = await getDocs(
-          collection(db, 'centers', user?.centerId || '', 'inventory')
+          collection(db, 'centers', user.centerId, 'inventory')
         );
+        console.log(`المركز ${user.centerId}: ${inventorySnapshot.size} عناصر`);
         inventorySnapshot.forEach(doc => {
-          items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+          const data: any = doc.data();
+          console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
+          items.push({ 
+            id: doc.id, 
+            ...data, 
+            centerId: user.centerId!, // تأكد من إضافة centerId الصحيح
+            centerName: centersMap[user.centerId!] 
+          } as InventoryItem);
         });
       }
+
+      console.log('\n=== ملخص النتائج (الصيانة) ===');
+      console.log('إجمالي العناصر المحملة:', items.length);
       
-      setInventoryItems(items.filter(item => item.quantity > 0));
+      // عرض تفاصيل كل عنصر
+      items.forEach((item, index) => {
+        console.log(`${index + 1}. العنصر: ${item.name}, الكمية: ${item.quantity}, المركز: ${item.centerName}, centerId: ${item.centerId}`);
+      });
+      
+      // ترتيب حسب اسم المركز ثم اسم المنتج
+      const filteredItems = items.filter(item => item.quantity > 0);
+      console.log('العناصر بعد فلترة الكمية (> 0):', filteredItems.length);
+      
+      const sortedItems = filteredItems.sort((a, b) => 
+        `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar')
+      );
+
+      setInventoryItems(sortedItems);
     } catch (error) {
       console.error('Error loading inventory:', error);
-      showNotification('خطأ في تحميل المخزون', 'error');
+      showNotification('خطأ في تحميل المخزون: ' + (error as any).message, 'error');
     }
   };
 
@@ -287,7 +340,10 @@ const MaintenanceManagement: React.FC = () => {
           <div className="header-actions">
             <button 
               className="btn-primary"
-              onClick={() => setShowAddForm(true)}
+              onClick={() => {
+                setShowAddForm(true);
+                loadInventoryItems(); // تحديث المخزون عند فتح النموذج
+              }}
             >
               <i className="fas fa-plus"></i>
               إضافة طلب صيانة جديد
@@ -298,7 +354,15 @@ const MaintenanceManagement: React.FC = () => {
               disabled={loading}
             >
               <i className="fas fa-sync-alt"></i>
-              تحديث
+              تحديث الصيانة
+            </button>
+            <button 
+              className="btn-secondary"
+              onClick={loadInventoryItems}
+              disabled={loading}
+            >
+              <i className="fas fa-boxes"></i>
+              تحديث المخزون
             </button>
           </div>
         </div>
@@ -394,10 +458,12 @@ const MaintenanceManagement: React.FC = () => {
                       onChange={(e) => handleItemSelect(e.target.value)}
                       required
                     >
-                      <option value="">اختر قطعة الغيار</option>
+                      <option value="">
+                        {inventoryItems.length === 0 ? 'لا توجد قطع غيار متوفرة' : 'اختر قطعة الغيار'}
+                      </option>
                       {inventoryItems.map(item => (
                         <option key={item.id} value={item.id}>
-                          {item.name} - متوفر: {item.quantity} - {formatCurrency(item.price)}
+                          {item.name} | {item.centerName || 'مركز'} | متوفر: {item.quantity} | {formatCurrency(item.price)}
                         </option>
                       ))}
                     </select>

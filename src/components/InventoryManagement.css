@@ -15,6 +15,12 @@
   border-bottom: 2px solid #e9ecef;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .page-header h1 {
   color: #333;
   display: flex;

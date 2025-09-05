@@ -23,11 +23,20 @@ const CenterManagement: React.FC = () => {
     phone: ''
   });
 
+  const [centerStats, setCenterStats] = useState<Record<string, { inventory: number; sales: number; maintenance: number }>>({});
+  const [statsLoading, setStatsLoading] = useState(false);
+
   useEffect(() => {
     if (currentUser?.isAdmin) {
       loadCenters();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (centers.length > 0) {
+      loadCenterStats();
+    }
+  }, [centers]);
 
   const loadCenters = async () => {
     try {
@@ -48,6 +57,41 @@ const CenterManagement: React.FC = () => {
       console.error('Error loading centers:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCenterStats = async () => {
+    try {
+      setStatsLoading(true);
+      const stats: Record<string, { inventory: number; sales: number; maintenance: number }> = {};
+      
+      for (const center of centers) {
+        // جلب عدد أصناف المخزون
+        const inventorySnapshot = await getDocs(collection(db, 'centers', center.id, 'inventory'));
+        const inventoryCount = inventorySnapshot.size;
+
+        // جلب عدد المبيعات
+        const salesSnapshot = await getDocs(collection(db, 'sales'));
+        const salesCount = salesSnapshot.docs.filter(doc => doc.data().centerId === center.id).length;
+
+        // جلب عدد طلبات الصيانة
+        const maintenanceSnapshot = await getDocs(collection(db, 'maintenance'));
+        const maintenanceCount = maintenanceSnapshot.docs.filter(doc => doc.data().centerId === center.id).length;
+
+        stats[center.id] = {
+          inventory: inventoryCount,
+          sales: salesCount,
+          maintenance: maintenanceCount
+        };
+      }
+
+      setCenterStats(stats);
+      showNotification('تم تحديث الإحصائيات بنجاح', 'success');
+    } catch (error) {
+      console.error('Error loading center stats:', error);
+      showNotification('حدث خطأ في تحميل إحصائيات المراكز', 'error');
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -103,6 +147,10 @@ const CenterManagement: React.FC = () => {
 
       resetForm();
       loadCenters();
+      // تحديث الإحصائيات بعد إضافة/تعديل المركز
+      setTimeout(() => {
+        loadCenterStats();
+      }, 1000);
     } catch (error) {
       showNotification('حدث خطأ في حفظ البيانات', 'error');
       console.error('Error saving center:', error);
@@ -149,10 +197,10 @@ const CenterManagement: React.FC = () => {
   };
 
   const getCenterStats = (center: Center) => {
-    return {
-      inventory: center.inventory?.length || 0,
-      sales: center.sales?.length || 0,
-      maintenance: center.maintenance?.length || 0
+    return centerStats[center.id] || {
+      inventory: 0,
+      sales: 0,
+      maintenance: 0
     };
   };
 
@@ -183,13 +231,23 @@ const CenterManagement: React.FC = () => {
           <i className="fas fa-building"></i>
           إدارة المراكز
         </h1>
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddForm(true)}
-        >
-          <i className="fas fa-plus"></i>
-          إضافة مركز جديد
-        </button>
+        <div className="header-actions">
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowAddForm(true)}
+          >
+            <i className="fas fa-plus"></i>
+            إضافة مركز جديد
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={loadCenterStats}
+            disabled={loading || statsLoading}
+          >
+            <i className={`fas ${statsLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+            {statsLoading ? 'جاري التحديث...' : 'تحديث الإحصائيات'}
+          </button>
+        </div>
       </div>
 
       {notification && (
@@ -358,7 +416,13 @@ const CenterManagement: React.FC = () => {
                       <i className="fas fa-boxes"></i>
                     </div>
                     <div className="stat-content">
-                      <div className="stat-number">{stats.inventory}</div>
+                      <div className="stat-number">
+                        {statsLoading ? (
+                          <i className="fas fa-spinner fa-spin"></i>
+                        ) : (
+                          stats.inventory
+                        )}
+                      </div>
                       <div className="stat-label">أصناف المخزون</div>
                     </div>
                   </div>
@@ -368,7 +432,13 @@ const CenterManagement: React.FC = () => {
                       <i className="fas fa-shopping-cart"></i>
                     </div>
                     <div className="stat-content">
-                      <div className="stat-number">{stats.sales}</div>
+                      <div className="stat-number">
+                        {statsLoading ? (
+                          <i className="fas fa-spinner fa-spin"></i>
+                        ) : (
+                          stats.sales
+                        )}
+                      </div>
                       <div className="stat-label">المبيعات</div>
                     </div>
                   </div>
@@ -378,7 +448,13 @@ const CenterManagement: React.FC = () => {
                       <i className="fas fa-tools"></i>
                     </div>
                     <div className="stat-content">
-                      <div className="stat-number">{stats.maintenance}</div>
+                      <div className="stat-number">
+                        {statsLoading ? (
+                          <i className="fas fa-spinner fa-spin"></i>
+                        ) : (
+                          stats.maintenance
+                        )}
+                      </div>
                       <div className="stat-label">طلبات الصيانة</div>
                     </div>
                   </div>
