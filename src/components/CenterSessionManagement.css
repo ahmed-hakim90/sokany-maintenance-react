@@ -1,0 +1,312 @@
+/* CenterSessionManagement.css */
+.center-session-management {
+  direction: rtl;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Session Header */
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 25px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 15px;
+  color: white;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+.session-info h2 {
+  margin: 0 0 15px 0;
+  font-size: 24px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.session-time,
+.session-duration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.session-actions {
+  display: flex;
+  gap: 15px;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+  color: white;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  color: white;
+}
+
+/* Activities Section */
+.activities-section {
+  background: white;
+  border-radius: 15px;
+  padding: 25px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.activities-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f1f2f6;
+}
+
+.activities-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.activities-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.filter-select,
+.search-input {
+  padding: 10px 15px;
+  border: 2px solid #e9ecef;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.filter-select:focus,
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-input {
+  min-width: 250px;
+}
+
+/* Activities List */
+.activities-list {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 15px;
+  border-bottom: 1px solid #f1f2f6;
+  transition: all 0.3s ease;
+}
+
+.activity-item:hover {
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: white;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.activity-content {
+  flex: 1;
+}
+
+.activity-main {
+  margin-bottom: 5px;
+}
+
+.activity-action {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 15px;
+}
+
+.activity-target {
+  color: #666;
+  font-size: 14px;
+}
+
+.activity-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 12px;
+  color: #888;
+}
+
+.activity-type {
+  background: #e3f2fd;
+  color: #1565c0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.activity-user {
+  font-style: italic;
+}
+
+.activity-time {
+  margin-right: auto;
+}
+
+/* No Activities */
+.no-activities {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.no-activities i {
+  font-size: 48px;
+  margin-bottom: 15px;
+  color: #dee2e6;
+}
+
+.no-activities p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Loading Screen */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  text-align: center;
+  color: #666;
+}
+
+.loading-screen i {
+  font-size: 48px;
+  margin-bottom: 20px;
+  color: #667eea;
+}
+
+.loading-screen p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .center-session-management {
+    padding: 15px;
+  }
+
+  .session-header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+
+  .session-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .activities-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .search-input {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .activity-meta {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .activity-time {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .session-info h2 {
+    font-size: 20px;
+  }
+
+  .activities-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .activities-header h3 {
+    font-size: 18px;
+  }
+
+  .activity-item {
+    padding: 12px;
+  }
+
+  .activity-icon {
+    width: 35px;
+    height: 35px;
+    font-size: 14px;
+  }
+}

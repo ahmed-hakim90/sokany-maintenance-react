@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import type { MaintenanceRequest, InventoryItem, Technician, Customer, Center } from '../types';
+import type { MaintenanceRequest, InventoryItem, Technician, Customer, Center, MaintenanceLifecycleEntry } from '../types';
+import { useActivityLogger } from './CenterSessionManagement';
 import './MaintenanceManagementNew.css';
 
 const MaintenanceManagementNew: React.FC = () => {
   const { user } = useAuth();
+  const { logActivity } = useActivityLogger();
   const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
@@ -15,6 +17,7 @@ const MaintenanceManagementNew: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<MaintenanceRequest | null>(null);
+  const [showLifecycleModal, setShowLifecycleModal] = useState<MaintenanceRequest | null>(null);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
   const [formData, setFormData] = useState({
@@ -286,6 +289,21 @@ const MaintenanceManagementNew: React.FC = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const createLifecycleEntry = (
+    status: MaintenanceRequest['status'],
+    action: string,
+    technicianAssigned?: string,
+    notes?: string
+  ): MaintenanceLifecycleEntry => ({
+    id: Date.now().toString(),
+    timestamp: new Date(),
+    status,
+    action,
+    performedBy: user?.email || 'غير محدد',
+    technicianAssigned,
+    notes
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -294,6 +312,13 @@ const MaintenanceManagementNew: React.FC = () => {
         showNotification('يرجى ملء جميع الحقول المطلوبة', 'error');
         return;
       }
+
+      const initialLifecycleEntry = createLifecycleEntry(
+        formData.status,
+        editingRequest ? 'تم تحديث طلب الصيانة' : 'تم إنشاء طلب صيانة جديد',
+        formData.technicianId ? technicians.find(t => t.id === formData.technicianId)?.name : undefined,
+        formData.notes
+      );
 
       const requestData = {
         customerName: formData.customerName,
@@ -310,7 +335,8 @@ const MaintenanceManagementNew: React.FC = () => {
         parts: formData.parts,
         notes: formData.notes,
         totalCost: formData.parts.reduce((sum, part) => sum + (part.quantity * part.unitPrice), 0),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        lifecycle: editingRequest ? [...(editingRequest.lifecycle || []), initialLifecycleEntry] : [initialLifecycleEntry]
       };
 
       if (editingRequest) {
@@ -323,13 +349,19 @@ const MaintenanceManagementNew: React.FC = () => {
           }
         );
         showNotification('تم تحديث طلب الصيانة بنجاح', 'success');
+        
+        // تسجيل النشاط
+        await logActivity('maintenance', `تم تحديث طلب الصيانة`, editingRequest.id, `${formData.customerName} - ${formData.deviceType}`);
       } else {
         // إضافة طلب جديد
-        await addDoc(collection(db, 'centers', formData.centerId, 'maintenance'), {
+        const docRef = await addDoc(collection(db, 'centers', formData.centerId, 'maintenance'), {
           ...requestData,
           createdAt: new Date()
         });
         showNotification('تم إضافة طلب الصيانة بنجاح', 'success');
+        
+        // تسجيل النشاط
+        await logActivity('maintenance', `تم إنشاء طلب صيانة جديد`, docRef.id, `${formData.customerName} - ${formData.deviceType}`);
       }
 
       // خصم قطع الغيار إذا تم الإكمال
@@ -363,26 +395,35 @@ const MaintenanceManagementNew: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (requestId: string, centerId: string, newStatus: string) => {
+  const handleStatusChange = async (requestId: string, centerId: string, newStatus: string, currentRequest: MaintenanceRequest) => {
     try {
-      const request = requests.find(r => r.id === requestId);
-      if (!request) return;
+      const lifecycleEntry = createLifecycleEntry(
+        newStatus as MaintenanceRequest['status'],
+        `تم تغيير الحالة إلى: ${getStatusLabel(newStatus)}`,
+        currentRequest.technicianName,
+        `تم التحديث من ${getStatusLabel(currentRequest.status)}`
+      );
 
       const updateData: any = {
         status: newStatus,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        lifecycle: [...(currentRequest.lifecycle || []), lifecycleEntry]
       };
 
       if (newStatus === 'completed') {
         updateData.completedAt = new Date();
         // خصم قطع الغيار عند الإكمال
-        if (request.parts && request.parts.length > 0) {
-          await deductInventoryParts(request.parts, centerId);
+        if (currentRequest.parts && currentRequest.parts.length > 0) {
+          await deductInventoryParts(currentRequest.parts, centerId);
         }
       }
 
       await updateDoc(doc(db, 'centers', centerId, 'maintenance', requestId), updateData);
       showNotification('تم تحديث حالة الطلب بنجاح', 'success');
+      
+      // تسجيل النشاط
+      await logActivity('maintenance', `تم تغيير حالة طلب الصيانة إلى: ${getStatusLabel(newStatus)}`, requestId, `${currentRequest.customerName} - ${currentRequest.deviceType}`);
+      
       loadMaintenanceRequests();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -469,16 +510,6 @@ const MaintenanceManagementNew: React.FC = () => {
   const getCenterName = (centerId: string) => {
     const center = centers.find(c => c.id === centerId);
     return center?.name || 'غير محدد';
-  };
-
-  const getTechnicianName = (technicianId: string) => {
-    const technician = technicians.find(t => t.id === technicianId);
-    return technician?.name || 'غير محدد';
-  };
-
-  const getCustomerName = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    return customer?.name || 'غير محدد';
   };
 
   const getStatusLabel = (status: string) => {
@@ -793,6 +824,13 @@ const MaintenanceManagementNew: React.FC = () => {
                 </div>
                 <div className="card-actions">
                   <button 
+                    className="btn-icon lifecycle"
+                    onClick={() => setShowLifecycleModal(request)}
+                    title="دورة الحياة"
+                  >
+                    <i className="fas fa-history"></i>
+                  </button>
+                  <button 
                     className="btn-icon edit"
                     onClick={() => handleEdit(request)}
                     title="تعديل"
@@ -820,7 +858,7 @@ const MaintenanceManagementNew: React.FC = () => {
                     <select
                       className={`status-select ${request.status}`}
                       value={request.status}
-                      onChange={(e) => handleStatusChange(request.id, request.centerId, e.target.value)}
+                      onChange={(e) => handleStatusChange(request.id, request.centerId, e.target.value, request)}
                     >
                       <option value="pending">معلق</option>
                       <option value="in-progress">قيد التنفيذ</option>
@@ -876,6 +914,69 @@ const MaintenanceManagementNew: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Lifecycle Modal */}
+      {showLifecycleModal && (
+        <div className="modal-overlay">
+          <div className="modal lifecycle-modal">
+            <div className="modal-header">
+              <h3>
+                <i className="fas fa-history"></i>
+                دورة حياة طلب الصيانة
+              </h3>
+              <button className="btn-close" onClick={() => setShowLifecycleModal(null)}>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="request-summary">
+                <h4>{showLifecycleModal.customerName} - {showLifecycleModal.deviceType}</h4>
+                <p>{showLifecycleModal.description}</p>
+                <div className="current-status">
+                  الحالة الحالية: <span className={`status ${showLifecycleModal.status}`}>{getStatusLabel(showLifecycleModal.status)}</span>
+                </div>
+              </div>
+
+              <div className="lifecycle-timeline">
+                {showLifecycleModal.lifecycle && showLifecycleModal.lifecycle.length > 0 ? (
+                  showLifecycleModal.lifecycle
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .map((entry) => (
+                    <div key={entry.id} className="timeline-item">
+                      <div className="timeline-icon">
+                        <i className={`fas ${entry.status === 'completed' ? 'fa-check-circle' : 
+                          entry.status === 'in-progress' ? 'fa-clock' : 
+                          entry.status === 'cancelled' ? 'fa-times-circle' : 'fa-pause-circle'}`}></i>
+                      </div>
+                      <div className="timeline-content">
+                        <div className="timeline-header">
+                          <h5>{entry.action}</h5>
+                          <span className="timeline-date">{new Date(entry.timestamp).toLocaleString('ar-EG')}</span>
+                        </div>
+                        <div className="timeline-details">
+                          <p><strong>بواسطة:</strong> {entry.performedBy}</p>
+                          {entry.technicianAssigned && (
+                            <p><strong>الفني:</strong> {entry.technicianAssigned}</p>
+                          )}
+                          {entry.notes && (
+                            <p><strong>ملاحظات:</strong> {entry.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="no-lifecycle">
+                    <i className="fas fa-info-circle"></i>
+                    <p>لا توجد بيانات دورة الحياة لهذا الطلب</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

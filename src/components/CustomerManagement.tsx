@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useActivityLogger } from './CenterSessionManagement';
 import type { Customer, Center, Sale, MaintenanceRequest } from '../types';
 import './CustomerManagement.css';
 
 const CustomerManagement: React.FC = () => {
   const { user } = useAuth();
+  const { logActivity } = useActivityLogger();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,13 +253,33 @@ const CustomerManagement: React.FC = () => {
           doc(db, 'centers', formData.centerId, 'customers', editingCustomer.id), 
           customerData
         );
+        
+        // تسجيل النشاط
+        await logActivity(
+          'customer',
+          `تم تحديث بيانات العميل: ${formData.name}`,
+          editingCustomer.id,
+          formData.name,
+          { oldData: editingCustomer, newData: customerData }
+        );
+        
         showNotification('تم تحديث بيانات العميل بنجاح', 'success');
       } else {
         // إضافة عميل جديد
-        await addDoc(collection(db, 'centers', formData.centerId, 'customers'), {
+        const docRef = await addDoc(collection(db, 'centers', formData.centerId, 'customers'), {
           ...customerData,
           createdAt: new Date()
         });
+        
+        // تسجيل النشاط
+        await logActivity(
+          'customer',
+          `تم إضافة عميل جديد: ${formData.name}`,
+          docRef.id,
+          formData.name,
+          customerData
+        );
+        
         showNotification('تم إضافة العميل بنجاح', 'success');
       }
 
@@ -284,6 +306,16 @@ const CustomerManagement: React.FC = () => {
     if (window.confirm('هل أنت متأكد من حذف هذا العميل؟')) {
       try {
         await deleteDoc(doc(db, 'centers', customer.centerId, 'customers', customer.id));
+        
+        // تسجيل النشاط
+        await logActivity(
+          'customer',
+          `تم حذف العميل: ${customer.name}`,
+          customer.id,
+          customer.name,
+          { deletedCustomer: customer }
+        );
+        
         showNotification('تم حذف العميل بنجاح', 'success');
         loadCustomers();
       } catch (error) {

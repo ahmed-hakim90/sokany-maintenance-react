@@ -8,6 +8,8 @@ import SalesManagement from './SalesManagement';
 import MaintenanceManagementNew from './MaintenanceManagementNew';
 import TechnicianManagement from './TechnicianManagement';
 import CustomerManagement from './CustomerManagement';
+import CenterSessionManagement from './CenterSessionManagement';
+import AllCentersSessions from './AllCentersSessions';
 import Reports from './Reports';
 // DataManager تمت إزالتها (البيانات التجريبية حذفت)
 import SessionInfo from './SessionInfo';
@@ -77,8 +79,12 @@ const Dashboard: React.FC = () => {
         return <TechnicianManagement />;
       case 'customers':
         return <CustomerManagement />;
+      case 'session':
+        return <CenterSessionManagement />;
       case 'centers':
         return <CenterManagement />;
+      case 'all-sessions':
+        return <AllCentersSessions />;
       case 'reports':
         return <Reports />;
   // تم حذف صفحة إدارة البيانات التجريبية
@@ -141,6 +147,16 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
+          <div className="card" onClick={() => handleNavigation('session')}>
+            <div className="card-icon">
+              <i className="fas fa-clock"></i>
+            </div>
+            <div className="card-content">
+              <h3>جلسة المركز</h3>
+              <p>تتبع الأنشطة والجلسة الحالية</p>
+            </div>
+          </div>
+
           {user?.isAdmin && (
             <>
               <div className="card" onClick={() => handleNavigation('centers')}>
@@ -150,6 +166,16 @@ const Dashboard: React.FC = () => {
                 <div className="card-content">
                   <h3>إدارة المراكز</h3>
                   <p>إضافة وإدارة المراكز</p>
+                </div>
+              </div>
+
+              <div className="card" onClick={() => handleNavigation('all-sessions')}>
+                <div className="card-icon">
+                  <i className="fas fa-chart-line"></i>
+                </div>
+                <div className="card-content">
+                  <h3>جلسات جميع المراكز</h3>
+                  <p>عرض تفصيلي لجميع الجلسات</p>
                 </div>
               </div>
 
@@ -241,6 +267,13 @@ const Dashboard: React.FC = () => {
             <i className="fas fa-address-book"></i>
             العملاء
           </button>
+          <button 
+            className={`nav-btn ${activeSection === 'session' ? 'active' : ''}`}
+            onClick={() => handleNavigation('session')}
+          >
+            <i className="fas fa-clock"></i>
+            جلسة المركز
+          </button>
           {user?.isAdmin && (
             <>
               <button 
@@ -249,6 +282,13 @@ const Dashboard: React.FC = () => {
               >
                 <i className="fas fa-building"></i>
                 المراكز
+              </button>
+              <button 
+                className={`nav-btn ${activeSection === 'all-sessions' ? 'active' : ''}`}
+                onClick={() => handleNavigation('all-sessions')}
+              >
+                <i className="fas fa-chart-line"></i>
+                جلسات المراكز
               </button>
               <button 
                 className={`nav-btn ${activeSection === 'reports' ? 'active' : ''}`}

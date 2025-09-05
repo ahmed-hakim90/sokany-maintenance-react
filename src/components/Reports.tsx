@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import type { InventoryItem, Sale, MaintenanceRecord, Center, Technician, Customer, MaintenanceRequest } from '../types';
+import type { InventoryItem, Sale, MaintenanceRecord, Center } from '../types';
 import './Reports.css';
 
 interface ReportStats {
@@ -180,7 +180,9 @@ const Reports: React.FC = () => {
               items: 0,
               sales: 0,
               maintenance: 0,
-              revenue: 0
+              revenue: 0,
+              technicians: 0,
+              customers: 0
             };
           }
           updatedCenterStats[centerId].items = centerInventoryStats[centerId];
@@ -266,7 +268,9 @@ const Reports: React.FC = () => {
               items: 0,
               sales: 0,
               maintenance: 0,
-              revenue: 0
+              revenue: 0,
+              technicians: 0,
+              customers: 0
             };
           }
           updatedCenterStats[centerId].sales = centerSalesStats[centerId].count;
@@ -344,13 +348,15 @@ const Reports: React.FC = () => {
       });
 
       // Calculate technician stats
-      const technicianStats: { [technicianName: string]: { completed: number; pending: number } } = {};
+      const technicianStats: { [technicianName: string]: { completed: number; pending: number; inProgress: number } } = {};
       maintenanceRecords.forEach(maintenance => {
         if (!technicianStats[maintenance.technicianName]) {
-          technicianStats[maintenance.technicianName] = { completed: 0, pending: 0 };
+          technicianStats[maintenance.technicianName] = { completed: 0, pending: 0, inProgress: 0 };
         }
         if (maintenance.status === 'تم الصيانة') {
           technicianStats[maintenance.technicianName].completed++;
+        } else if (maintenance.status === 'في انتظار الفني') {
+          technicianStats[maintenance.technicianName].inProgress++;
         } else {
           technicianStats[maintenance.technicianName].pending++;
         }
@@ -390,7 +396,9 @@ const Reports: React.FC = () => {
               items: 0,
               sales: 0,
               maintenance: 0,
-              revenue: 0
+              revenue: 0,
+              technicians: 0,
+              customers: 0
             };
           }
           updatedCenterStats[centerId].maintenance = centerMaintenanceStats[centerId];

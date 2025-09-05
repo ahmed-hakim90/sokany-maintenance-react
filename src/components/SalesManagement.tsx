@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useActivityLogger } from './CenterSessionManagement';
 import type { Sale, InventoryItem, Customer } from '../types';
 import './SalesManagement.css';
 
@@ -28,6 +29,7 @@ interface NewSale {
 
 const SalesManagement: React.FC = () => {
   const { user, updateLastActivity } = useAuth();
+  const { logActivity } = useActivityLogger();
   const [sales, setSales] = useState<Sale[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -285,7 +287,20 @@ const SalesManagement: React.FC = () => {
         createdAt: new Date()
       };
 
-      await addDoc(collection(db, 'sales'), saleData);
+      const docRef = await addDoc(collection(db, 'sales'), saleData);
+
+      // تسجيل النشاط
+      await logActivity(
+        'sales',
+        `تم إنشاء مبيعة جديدة: ${newSale.itemName} للعميل ${newSale.customerName}`,
+        docRef.id,
+        `${newSale.itemName} - ${newSale.customerName}`,
+        { 
+          sale: saleData,
+          quantity: newSale.quantity,
+          totalPrice: newSale.totalPrice
+        }
+      );
 
       // تحديث كمية المنتج في المخزون
       const newQuantity = selectedItem.quantity - newSale.quantity;

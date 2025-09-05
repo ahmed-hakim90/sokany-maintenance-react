@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useActivityLogger } from './CenterSessionManagement';
 import type { Technician, Center } from '../types';
 import './TechnicianManagement.css';
 
 const TechnicianManagement: React.FC = () => {
   const { user } = useAuth();
+  const { logActivity } = useActivityLogger();
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,13 +194,33 @@ const TechnicianManagement: React.FC = () => {
           doc(db, 'centers', formData.centerId, 'technicians', editingTechnician.id), 
           technicianData
         );
+        
+        // تسجيل النشاط
+        await logActivity(
+          'technician',
+          `تم تحديث بيانات الفني: ${formData.name}`,
+          editingTechnician.id,
+          formData.name,
+          { oldData: editingTechnician, newData: technicianData }
+        );
+        
         showNotification('تم تحديث بيانات الفني بنجاح', 'success');
       } else {
         // إضافة فني جديد
-        await addDoc(collection(db, 'centers', formData.centerId, 'technicians'), {
+        const docRef = await addDoc(collection(db, 'centers', formData.centerId, 'technicians'), {
           ...technicianData,
           createdAt: new Date()
         });
+        
+        // تسجيل النشاط
+        await logActivity(
+          'technician',
+          `تم إضافة فني جديد: ${formData.name}`,
+          docRef.id,
+          formData.name,
+          technicianData
+        );
+        
         showNotification('تم إضافة الفني بنجاح', 'success');
       }
 
@@ -224,6 +246,16 @@ const TechnicianManagement: React.FC = () => {
     if (window.confirm('هل أنت متأكد من حذف هذا الفني؟')) {
       try {
         await deleteDoc(doc(db, 'centers', technician.centerId, 'technicians', technician.id));
+        
+        // تسجيل النشاط
+        await logActivity(
+          'technician',
+          `تم حذف الفني: ${technician.name}`,
+          technician.id,
+          technician.name,
+          { deletedTechnician: technician }
+        );
+        
         showNotification('تم حذف الفني بنجاح', 'success');
         loadTechnicians();
       } catch (error) {

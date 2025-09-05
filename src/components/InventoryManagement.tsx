@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useActivityLogger } from './CenterSessionManagement';
 import { migrateInventoryData } from '../utils/migrateData';
 import type { InventoryItem, Center } from '../types';
 import './InventoryManagement.css';
 
 const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
+  const { logActivity } = useActivityLogger();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,13 +129,33 @@ const InventoryManagement: React.FC = () => {
       if (editingItem) {
         // تحديث في البنية الجديدة: centers/{centerId}/inventory
         await updateDoc(doc(db, 'centers', formData.centerId, 'inventory', editingItem.id), itemData);
+        
+        // تسجيل النشاط
+        await logActivity(
+          'inventory',
+          `تم تحديث صنف: ${formData.name}`,
+          editingItem.id,
+          formData.name,
+          { oldData: editingItem, newData: itemData }
+        );
+        
         showNotification('تم تحديث الصنف بنجاح', 'success');
       } else {
         // إضافة في البنية الجديدة: centers/{centerId}/inventory
-        await addDoc(collection(db, 'centers', formData.centerId, 'inventory'), {
+        const docRef = await addDoc(collection(db, 'centers', formData.centerId, 'inventory'), {
           ...itemData,
           createdAt: new Date()
         });
+        
+        // تسجيل النشاط
+        await logActivity(
+          'inventory',
+          `تم إضافة صنف جديد: ${formData.name}`,
+          docRef.id,
+          formData.name,
+          itemData
+        );
+        
         showNotification('تم إضافة الصنف بنجاح', 'success');
       }
 
@@ -162,6 +184,16 @@ const InventoryManagement: React.FC = () => {
       try {
         // حذف من البنية الجديدة: centers/{centerId}/inventory
         await deleteDoc(doc(db, 'centers', item.centerId, 'inventory', item.id));
+        
+        // تسجيل النشاط
+        await logActivity(
+          'inventory',
+          `تم حذف صنف: ${item.name}`,
+          item.id,
+          item.name,
+          { deletedItem: item }
+        );
+        
         showNotification('تم حذف الصنف بنجاح', 'success');
         loadItems();
       } catch (error) {
