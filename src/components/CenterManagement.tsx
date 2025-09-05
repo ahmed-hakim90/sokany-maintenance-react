@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Center } from '../types';
 import './CenterManagement.css';
@@ -16,7 +17,10 @@ const CenterManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    managerName: '',
+    address: '',
+    phone: ''
   });
 
   useEffect(() => {
@@ -65,6 +69,9 @@ const CenterManagement: React.FC = () => {
         name: formData.name,
         email: formData.email,
         password: formData.password || 'center123',
+        managerName: formData.managerName || '',
+        address: formData.address || '',
+        phone: formData.phone || '',
         uid: '',
         inventory: [],
         sales: [],
@@ -74,16 +81,24 @@ const CenterManagement: React.FC = () => {
       if (editingCenter) {
         await updateDoc(doc(db, 'centers', editingCenter.id), {
           name: formData.name,
-          email: formData.email,
-          ...(formData.password && { password: formData.password })
-        });
+            email: formData.email,
+            managerName: formData.managerName || '',
+            address: formData.address || '',
+            phone: formData.phone || '',
+            ...(formData.password && { password: formData.password })
+          });
         showNotification('تم تحديث المركز بنجاح', 'success');
       } else {
+        // إنشاء مستخدم Firebase Auth للمركز
+        const userCredential = await createUserWithEmailAndPassword(auth, centerData.email, centerData.password);
+        const uid = userCredential.user.uid;
+        // إنشاء وثيقة المركز وربط uid
         await addDoc(collection(db, 'centers'), {
           ...centerData,
+          uid,
           createdAt: new Date()
         });
-        showNotification('تم إضافة المركز بنجاح', 'success');
+        showNotification('تم إضافة المركز وإنشاء حساب الدخول', 'success');
       }
 
       resetForm();
@@ -99,7 +114,10 @@ const CenterManagement: React.FC = () => {
     setFormData({
       name: center.name,
       email: center.email,
-      password: ''
+      password: '',
+      managerName: center.managerName || '',
+      address: center.address || '',
+      phone: center.phone || ''
     });
     setShowAddForm(true);
   };
@@ -121,7 +139,10 @@ const CenterManagement: React.FC = () => {
     setFormData({
       name: '',
       email: '',
-      password: ''
+      password: '',
+      managerName: '',
+      address: '',
+      phone: ''
     });
     setEditingCenter(null);
     setShowAddForm(false);
@@ -195,6 +216,37 @@ const CenterManagement: React.FC = () => {
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>اسم الموظف / المدير:</label>
+                <input
+                  type="text"
+                  value={formData.managerName}
+                  onChange={(e) => setFormData({...formData, managerName: e.target.value})}
+                  placeholder="مثال: أحمد محمد"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>العنوان:</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({...formData, address: e.target.value})}
+                  placeholder="المدينة - الحي - الشارع"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>رقم الهاتف:</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  placeholder="05xxxxxxxx"
+                  pattern="^[0-9+\-() ]{6,}$"
                 />
               </div>
 
@@ -273,6 +325,24 @@ const CenterManagement: React.FC = () => {
                     <i className="fas fa-envelope"></i>
                     <span>{center.email}</span>
                   </div>
+                  {center.managerName && (
+                    <div className="info-item">
+                      <i className="fas fa-user-tie"></i>
+                      <span>المدير: {center.managerName}</span>
+                    </div>
+                  )}
+                  {center.phone && (
+                    <div className="info-item">
+                      <i className="fas fa-phone"></i>
+                      <span>{center.phone}</span>
+                    </div>
+                  )}
+                  {center.address && (
+                    <div className="info-item">
+                      <i className="fas fa-map-marker-alt"></i>
+                      <span>{center.address}</span>
+                    </div>
+                  )}
                   
                   <div className="info-item">
                     <i className="fas fa-calendar"></i>

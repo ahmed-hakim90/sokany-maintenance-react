@@ -48,6 +48,7 @@ const SalesManagement: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!user) return; // انتظر حتى تتوفر بيانات المستخدم
     loadSales();
     loadInventoryItems();
     updateLastActivity();
@@ -64,29 +65,37 @@ const SalesManagement: React.FC = () => {
       let salesQuery;
 
       if (user?.isAdmin) {
-        // Admin يرى جميع المبيعات
         salesQuery = query(
           collection(db, 'sales'),
           orderBy('date', 'desc')
+        );
+      } else if (user?.centerId) {
+        // استعلام بدون orderBy لتجنب الحاجة إلى فهرس مركب ثم فرز محلي
+        salesQuery = query(
+          collection(db, 'sales'),
+          where('centerId', '==', user.centerId)
         );
       } else {
-        // مدير المركز يرى مبيعات مركزه فقط
-        salesQuery = query(
-          collection(db, 'sales'),
-          where('centerId', '==', user?.centerId),
-          orderBy('date', 'desc')
-        );
+        setSales([]);
+        return;
       }
 
       const snapshot = await getDocs(salesQuery);
-      const salesData: Sale[] = [];
-      snapshot.forEach(doc => {
-        salesData.push({ id: doc.id, ...doc.data() } as Sale);
+      let salesData: Sale[] = [];
+      snapshot.forEach(d => {
+        salesData.push({ id: d.id, ...d.data() } as Sale);
+      });
+      // فرز محلي إذا لم نستخدم orderBy في الاستعلام
+      salesData.sort((a, b) => {
+        const da = (a.date as any)?.toDate ? (a.date as any).toDate() : new Date(a.date);
+        const dbb = (b.date as any)?.toDate ? (b.date as any).toDate() : new Date(b.date);
+        return dbb.getTime() - da.getTime();
       });
       setSales(salesData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading sales:', error);
-      showNotification('خطأ في تحميل المبيعات', 'error');
+      const needsIndex = error?.message?.includes('index') || error?.code === 'failed-precondition';
+      showNotification(needsIndex ? 'مطلوب فهرس في Firestore، سيتم استخدام فرز محلي لاحقاً' : 'خطأ في تحميل المبيعات', 'error');
     } finally {
       setLoading(false);
     }
@@ -95,29 +104,40 @@ const SalesManagement: React.FC = () => {
   const loadInventoryItems = async () => {
     try {
       let items: InventoryItem[] = [];
-      
+
+      // احصل على جميع المراكز (للأدمن أو لتسمية مركز المستخدم فقط)
+      const centersMap: Record<string, string> = {};
+      const centersSnapshot = await getDocs(collection(db, 'centers'));
+      centersSnapshot.forEach(c => {
+        const data: any = c.data();
+        centersMap[c.id] = data.name || 'مركز غير معروف';
+      });
+
       if (user?.isAdmin) {
-        // Admin يرى جميع المنتجات
-        const centersSnapshot = await getDocs(collection(db, 'centers'));
         for (const centerDoc of centersSnapshot.docs) {
           const inventorySnapshot = await getDocs(
             collection(db, 'centers', centerDoc.id, 'inventory')
           );
-          inventorySnapshot.forEach(doc => {
-            items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+          inventorySnapshot.forEach(inv => {
+            const data: any = inv.data();
+            items.push({ id: inv.id, ...data, centerName: centersMap[centerDoc.id] } as InventoryItem);
           });
         }
-      } else {
-        // مدير المركز يرى منتجات مركزه فقط
+      } else if (user?.centerId) {
         const inventorySnapshot = await getDocs(
-          collection(db, 'centers', user?.centerId || '', 'inventory')
+          collection(db, 'centers', user.centerId, 'inventory')
         );
-        inventorySnapshot.forEach(doc => {
-          items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+        inventorySnapshot.forEach(inv => {
+          const data: any = inv.data();
+            items.push({ id: inv.id, ...data, centerName: centersMap[user.centerId!] } as InventoryItem);
         });
       }
-      
-      setInventoryItems(items.filter(item => item.quantity > 0));
+
+      // صف وترتيب حسب اسم المركز ثم اسم المنتج لتسهيل الاختيار
+      items = items.filter(i => i.quantity > 0)
+        .sort((a, b) => `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar')); 
+
+      setInventoryItems(items);
     } catch (error) {
       console.error('Error loading inventory:', error);
       showNotification('خطأ في تحميل المخزون', 'error');
@@ -196,7 +216,7 @@ const SalesManagement: React.FC = () => {
       loadInventoryItems();
     } catch (error) {
       console.error('Error adding sale:', error);
-      showNotification('خطأ في إضافة المبيعة', 'error');
+      showNotification('خطأ في إضافة عملية البيع', 'error');
     } finally {
       setLoading(false);
     }
@@ -222,10 +242,17 @@ const SalesManagement: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'SAR'
-    }).format(amount);
+    // استخدام كود عملة صالح (يمكن تغييره لاحقاً) مع fallback لمنع تعطل الواجهة
+    const validCurrency = 'USD'; // TODO: عدل إلى العملة المطلوبة رسمياً (مثال: 'SDG', 'SAR', 'EGP')
+    try {
+      return new Intl.NumberFormat('ar-EG', {
+        style: 'currency',
+        currency: validCurrency
+      }).format(amount);
+    } catch {
+      // في حال أي خطأ (كود عملة غير مدعوم) نرجع رقم بسيط منسق
+      return amount.toFixed(2) + ' ' + validCurrency;
+    }
   };
 
   const getTotalSales = () => {
@@ -246,7 +273,7 @@ const SalesManagement: React.FC = () => {
               onClick={() => setShowAddForm(true)}
             >
               <i className="fas fa-plus"></i>
-              إضافة مبيعة جديدة
+              إضافة بيع جديد
             </button>
             <button 
               className="btn-secondary"
@@ -320,7 +347,7 @@ const SalesManagement: React.FC = () => {
                     <option value="">اختر المنتج</option>
                     {inventoryItems.map(item => (
                       <option key={item.id} value={item.id}>
-                        {item.name} - متوفر: {item.quantity} - {formatCurrency(item.price)}
+                        {item.name} | {item.centerName || 'مركز'} | متوفر: {item.quantity} | {formatCurrency(item.price)}
                       </option>
                     ))}
                   </select>
@@ -471,7 +498,14 @@ const SalesManagement: React.FC = () => {
                     <td>
                       <div className="item-info">
                         <strong>{sale.itemName}</strong>
-                        <small>{formatCurrency(sale.totalPrice / sale.quantity)} للوحدة</small>
+                        <small>
+                          {sale.centerName && (
+                            <span style={{ display: 'inline-block', marginLeft: 4 }}>
+                              ({sale.centerName})
+                            </span>
+                          )}
+                          {' '}{formatCurrency(sale.totalPrice / sale.quantity)} للوحدة
+                        </small>
                       </div>
                     </td>
                     <td>

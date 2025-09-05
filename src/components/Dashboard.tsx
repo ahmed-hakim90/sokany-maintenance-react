@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import InventoryManagement from './InventoryManagement';
 import UserManagement from './UserManagement';
@@ -6,13 +8,48 @@ import CenterManagement from './CenterManagement';
 import SalesManagement from './SalesManagement';
 import MaintenanceManagement from './MaintenanceManagement';
 import Reports from './Reports';
-import DataManager from './DataManager';
+// DataManager تمت إزالتها (البيانات التجريبية حذفت)
 import SessionInfo from './SessionInfo';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
   const { user, logout, updateLastActivity } = useAuth();
   const [activeSection, setActiveSection] = useState<string>('dashboard');
+  const [employeeName, setEmployeeName] = useState<string>('');
+
+  // جلب اسم الموظف (managerName) عند توفر المستخدم
+  useEffect(() => {
+    const loadManagerName = async () => {
+      if (!user || user.isAdmin) {
+        setEmployeeName('');
+        return;
+      }
+      // حاول أولاً من localStorage
+      try {
+        const stored = localStorage.getItem('currentCenter');
+        if (stored) {
+          const center = JSON.parse(stored);
+          if (center.managerName) {
+            setEmployeeName(center.managerName);
+            return;
+          }
+        }
+        // fallback Firestore
+        if (user.centerId) {
+          const snap = await getDoc(doc(db, 'centers', user.centerId));
+            if (snap.exists()) {
+              const data: any = snap.data();
+              if (data.managerName) {
+                setEmployeeName(data.managerName);
+              }
+            }
+        }
+      } catch (e) {
+        console.warn('تعذر جلب اسم الموظف:', e);
+      }
+    };
+    loadManagerName();
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -41,8 +78,7 @@ const Dashboard: React.FC = () => {
         return <CenterManagement />;
       case 'reports':
         return <Reports />;
-      case 'data-manager':
-        return <DataManager />;
+  // تم حذف صفحة إدارة البيانات التجريبية
       default:
         return renderDashboardHome();
     }
@@ -114,15 +150,7 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="card data-manager-card" onClick={() => handleNavigation('data-manager')}>
-                <div className="card-icon">
-                  <i className="fas fa-database"></i>
-                </div>
-                <div className="card-content">
-                  <h3>إدارة البيانات التجريبية</h3>
-                  <p>إنشاء وإدارة بيانات الاختبار</p>
-                </div>
-              </div>
+              {/* بطاقة إدارة البيانات التجريبية محذوفة */}
             </>
             
           )}
@@ -141,7 +169,11 @@ const Dashboard: React.FC = () => {
           </h1>
           <div className="user-info">
             <span>
-              مرحباً، {user?.isAdmin ? 'المسؤول' : user?.email || 'المستخدم'}
+              {user?.isAdmin
+                ? 'مرحباً، المسؤول'
+                : employeeName
+                  ? `مرحباً، ${employeeName}`
+                  : `مرحباً، ${user?.email || 'المستخدم'}`}
             </span>
             <button onClick={handleLogout} className="logout-btn">
               <i className="fas fa-sign-out-alt"></i>
@@ -205,14 +237,7 @@ const Dashboard: React.FC = () => {
                 <i className="fas fa-chart-bar"></i>
                 التقارير
               </button>
-              <button 
-                className={`nav-btn ${activeSection === 'data-manager' ? 'active' : ''}`}
-                onClick={() => handleNavigation('data-manager')}
-                style={{ background: 'linear-gradient(135deg, #ff6b6b, #ee5a24)' }}
-              >
-                <i className="fas fa-database"></i>
-                البيانات التجريبية
-              </button>
+              {/* زر البيانات التجريبية محذوف داخل لوحة المدير */}
             </>
           )}
         </div>

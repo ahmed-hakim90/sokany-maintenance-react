@@ -66,6 +66,7 @@ const MaintenanceManagement: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     loadMaintenanceRecords();
     loadInventoryItems();
     updateLastActivity();
@@ -82,29 +83,35 @@ const MaintenanceManagement: React.FC = () => {
       let maintenanceQuery;
 
       if (user?.isAdmin) {
-        // Admin يرى جميع سجلات الصيانة
         maintenanceQuery = query(
           collection(db, 'maintenance'),
           orderBy('date', 'desc')
+        );
+      } else if (user?.centerId) {
+        maintenanceQuery = query(
+          collection(db, 'maintenance'),
+          where('centerId', '==', user.centerId)
         );
       } else {
-        // مدير المركز يرى سجلات مركزه فقط
-        maintenanceQuery = query(
-          collection(db, 'maintenance'),
-          where('centerId', '==', user?.centerId),
-          orderBy('date', 'desc')
-        );
+        setMaintenanceRecords([]);
+        return;
       }
 
       const snapshot = await getDocs(maintenanceQuery);
-      const records: MaintenanceRecord[] = [];
-      snapshot.forEach(doc => {
-        records.push({ id: doc.id, ...doc.data() } as MaintenanceRecord);
+      let records: MaintenanceRecord[] = [];
+      snapshot.forEach(d => {
+        records.push({ id: d.id, ...d.data() } as MaintenanceRecord);
+      });
+      records.sort((a, b) => {
+        const da = (a.date as any)?.toDate ? (a.date as any).toDate() : new Date(a.date);
+        const dbb = (b.date as any)?.toDate ? (b.date as any).toDate() : new Date(b.date);
+        return dbb.getTime() - da.getTime();
       });
       setMaintenanceRecords(records);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading maintenance records:', error);
-      showNotification('خطأ في تحميل سجلات الصيانة', 'error');
+      const needsIndex = error?.message?.includes('index') || error?.code === 'failed-precondition';
+      showNotification(needsIndex ? 'مطلوب فهرس في Firestore، سيتم استخدام فرز محلي' : 'خطأ في تحميل سجلات الصيانة', 'error');
     } finally {
       setLoading(false);
     }
@@ -113,29 +120,39 @@ const MaintenanceManagement: React.FC = () => {
   const loadInventoryItems = async () => {
     try {
       let items: InventoryItem[] = [];
-      
+
+      // خريطة أسماء المراكز
+      const centersMap: Record<string, string> = {};
+      const centersSnapshot = await getDocs(collection(db, 'centers'));
+      centersSnapshot.forEach(c => {
+        const data: any = c.data();
+        centersMap[c.id] = data.name || 'مركز غير معروف';
+      });
+
       if (user?.isAdmin) {
-        // Admin يرى جميع المنتجات
-        const centersSnapshot = await getDocs(collection(db, 'centers'));
         for (const centerDoc of centersSnapshot.docs) {
           const inventorySnapshot = await getDocs(
             collection(db, 'centers', centerDoc.id, 'inventory')
           );
-          inventorySnapshot.forEach(doc => {
-            items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+          inventorySnapshot.forEach(inv => {
+            const data: any = inv.data();
+            items.push({ id: inv.id, ...data, centerName: centersMap[centerDoc.id] } as InventoryItem);
           });
         }
-      } else {
-        // مدير المركز يرى منتجات مركزه فقط
+      } else if (user?.centerId) {
         const inventorySnapshot = await getDocs(
-          collection(db, 'centers', user?.centerId || '', 'inventory')
+          collection(db, 'centers', user.centerId, 'inventory')
         );
-        inventorySnapshot.forEach(doc => {
-          items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+        inventorySnapshot.forEach(inv => {
+          const data: any = inv.data();
+          items.push({ id: inv.id, ...data, centerName: centersMap[user.centerId!] } as InventoryItem);
         });
       }
-      
-      setInventoryItems(items.filter(item => item.quantity > 0));
+
+      items = items.filter(i => i.quantity > 0)
+        .sort((a, b) => `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar'));
+
+      setInventoryItems(items);
     } catch (error) {
       console.error('Error loading inventory:', error);
       showNotification('خطأ في تحميل المخزون', 'error');
@@ -390,7 +407,7 @@ const MaintenanceManagement: React.FC = () => {
                       <option value="">اختر قطعة الغيار</option>
                       {inventoryItems.map(item => (
                         <option key={item.id} value={item.id}>
-                          {item.name} - متوفر: {item.quantity} - {formatCurrency(item.price)}
+                          {item.name} | {item.centerName || 'مركز'} | متوفر: {item.quantity} | {formatCurrency(item.price)}
                         </option>
                       ))}
                     </select>

@@ -4,6 +4,9 @@ export interface Center {
   email: string;
   password: string;
   uid: string;
+  managerName?: string; // اسم موظف / مدير المركز
+  address?: string;     // عنوان المركز
+  phone?: string;       // رقم الهاتف
   inventory: InventoryItem[];
   sales: Sale[];
   maintenance: MaintenanceRecord[];
@@ -17,6 +20,7 @@ export interface InventoryItem {
   price: number;
   note?: string;
   centerId: string;
+  centerName?: string;
   createdAt: Date;
   updatedAt?: Date;
 }
