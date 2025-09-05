@@ -243,7 +243,7 @@ const SalesManagement: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     // استخدام كود عملة صالح (يمكن تغييره لاحقاً) مع fallback لمنع تعطل الواجهة
-    const validCurrency = 'USD'; // TODO: عدل إلى العملة المطلوبة رسمياً (مثال: 'SDG', 'SAR', 'EGP')
+    const validCurrency = 'E.P'; // TODO: عدل إلى العملة المطلوبة رسمياً (مثال: 'SDG', 'SAR', 'EGP')
     try {
       return new Intl.NumberFormat('ar-EG', {
         style: 'currency',

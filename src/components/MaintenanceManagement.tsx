@@ -121,38 +121,28 @@ const MaintenanceManagement: React.FC = () => {
     try {
       let items: InventoryItem[] = [];
 
-      // خريطة أسماء المراكز
-      const centersMap: Record<string, string> = {};
-      const centersSnapshot = await getDocs(collection(db, 'centers'));
-      centersSnapshot.forEach(c => {
-        const data: any = c.data();
-        centersMap[c.id] = data.name || 'مركز غير معروف';
-      });
-
       if (user?.isAdmin) {
+        // الأدمن يرى جميع المنتجات من جميع المراكز
+        const centersSnapshot = await getDocs(collection(db, 'centers'));
         for (const centerDoc of centersSnapshot.docs) {
           const inventorySnapshot = await getDocs(
             collection(db, 'centers', centerDoc.id, 'inventory')
           );
-          inventorySnapshot.forEach(inv => {
-            const data: any = inv.data();
-            items.push({ id: inv.id, ...data, centerName: centersMap[centerDoc.id] } as InventoryItem);
+          inventorySnapshot.forEach(doc => {
+            items.push({ id: doc.id, ...doc.data() } as InventoryItem);
           });
         }
-      } else if (user?.centerId) {
+      } else {
+        // مدير المركز يرى منتجات مركزه فقط
         const inventorySnapshot = await getDocs(
-          collection(db, 'centers', user.centerId, 'inventory')
+          collection(db, 'centers', user?.centerId || '', 'inventory')
         );
-        inventorySnapshot.forEach(inv => {
-          const data: any = inv.data();
-          items.push({ id: inv.id, ...data, centerName: centersMap[user.centerId!] } as InventoryItem);
+        inventorySnapshot.forEach(doc => {
+          items.push({ id: doc.id, ...doc.data() } as InventoryItem);
         });
       }
-
-      items = items.filter(i => i.quantity > 0)
-        .sort((a, b) => `${a.centerName}-${a.name}`.localeCompare(`${b.centerName}-${b.name}`, 'ar'));
-
-      setInventoryItems(items);
+      
+      setInventoryItems(items.filter(item => item.quantity > 0));
     } catch (error) {
       console.error('Error loading inventory:', error);
       showNotification('خطأ في تحميل المخزون', 'error');
@@ -407,7 +397,7 @@ const MaintenanceManagement: React.FC = () => {
                       <option value="">اختر قطعة الغيار</option>
                       {inventoryItems.map(item => (
                         <option key={item.id} value={item.id}>
-                          {item.name} | {item.centerName || 'مركز'} | متوفر: {item.quantity} | {formatCurrency(item.price)}
+                          {item.name} - متوفر: {item.quantity} - {formatCurrency(item.price)}
                         </option>
                       ))}
                     </select>

@@ -17,7 +17,7 @@ const LoginForm: React.FC = () => {
     message: string;
     type: 'success' | 'error';
   } | null>(null);
-  const [showLoginInfo, setShowLoginInfo] = useState(false);
+//   const [showLoginInfo, setShowLoginInfo] = useState(false);
 
   useEffect(() => {
     loadCenters();
