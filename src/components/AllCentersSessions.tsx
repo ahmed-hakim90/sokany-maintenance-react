@@ -117,13 +117,19 @@ const AllCentersSessions: React.FC = () => {
         const data = doc.data();
         activities.push({
           id: doc.id,
+          centerId: data.centerId || '',
+          userId: data.userId || '',
+          userName: data.userName || data.performedBy || '',
           timestamp: data.timestamp.toDate(),
+          action: data.action || '',
+          description: data.description || data.action || '',
+          type: data.type || 'other',
+          details: data.details || null,
+          // للتوافق مع النسخة القديمة
           activityType: data.activityType,
-          action: data.action,
           targetId: data.targetId || '',
           targetName: data.targetName || '',
-          performedBy: data.performedBy || '',
-          details: data.details || null
+          performedBy: data.performedBy || ''
         });
       });
 
@@ -391,7 +397,7 @@ const AllCentersSessions: React.FC = () => {
                   {sessionActivities.map(activity => (
                     <div key={activity.id} className="activity-item">
                       <div className="activity-icon">
-                        <i className={getActivityIcon(activity.activityType)}></i>
+                        <i className={getActivityIcon(activity.activityType || 'other')}></i>
                       </div>
                       <div className="activity-content">
                         <div className="activity-main">
@@ -401,7 +407,7 @@ const AllCentersSessions: React.FC = () => {
                           )}
                         </div>
                         <div className="activity-meta">
-                          <span className="activity-type">{getActivityTypeLabel(activity.activityType)}</span>
+                          <span className="activity-type">{getActivityTypeLabel(activity.activityType || 'other')}</span>
                           <span className="activity-user">{activity.performedBy}</span>
                           <span className="activity-time">{activity.timestamp.toLocaleString('ar-EG')}</span>
                         </div>

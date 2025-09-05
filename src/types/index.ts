@@ -179,3 +179,23 @@ export interface CenterActivityLog {
   targetName?: string;
   performedBy?: string;
 }
+
+// واجهة للأنشطة العامة مع معلومات المركز
+export interface GlobalActivityWithCenter {
+  id: string;
+  centerId: string;
+  centerName: string;
+  userId: string;
+  userName: string;
+  timestamp: Date;
+  action: string;
+  description: string;
+  type: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'session' | 'other';
+  details?: any;
+  
+  // للتوافق مع النسخة القديمة
+  activityType?: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'login' | 'logout';
+  targetId?: string;
+  targetName?: string;
+  performedBy?: string;
+}

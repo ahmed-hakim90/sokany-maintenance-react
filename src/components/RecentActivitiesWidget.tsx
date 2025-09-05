@@ -41,13 +41,18 @@ const RecentActivitiesWidget: React.FC = () => {
           id: doc.id,
           centerId: data.centerId,
           centerName: data.centerName || 'غير محدد',
+          userId: data.userId || '',
+          userName: data.userName || data.performedBy || '',
           timestamp: data.timestamp.toDate(),
+          action: data.action || '',
+          description: data.description || data.action || '',
+          type: data.type || 'other',
+          details: data.details || null,
+          // للتوافق مع النسخة القديمة
           activityType: data.activityType,
-          action: data.action,
           targetId: data.targetId || '',
           targetName: data.targetName || '',
-          performedBy: data.performedBy || '',
-          details: data.details || null
+          performedBy: data.performedBy || ''
         });
       });
 
@@ -130,9 +135,9 @@ const RecentActivitiesWidget: React.FC = () => {
               <div key={`${activity.centerId}-${activity.id}`} className="activity-item-widget">
                 <div 
                   className="activity-icon-widget"
-                  style={{ backgroundColor: getActivityTypeColor(activity.activityType) }}
+                  style={{ backgroundColor: getActivityTypeColor(activity.activityType || 'other') }}
                 >
-                  <i className={getActivityIcon(activity.activityType)}></i>
+                  <i className={getActivityIcon(activity.activityType || 'other')}></i>
                 </div>
                 <div className="activity-content-widget">
                   <div className="activity-text">

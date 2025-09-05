@@ -30,13 +30,18 @@ export const useRealTimeActivities = (isAdmin: boolean) => {
           id: doc.id,
           centerId: data.centerId,
           centerName: data.centerName || 'غير محدد',
+          userId: data.userId || '',
+          userName: data.userName || data.performedBy || '',
           timestamp: data.timestamp.toDate(),
+          action: data.action || '',
+          description: data.description || data.action || '',
+          type: data.type || 'other',
+          details: data.details || null,
+          // للتوافق مع النسخة القديمة
           activityType: data.activityType,
-          action: data.action,
           targetId: data.targetId || '',
           targetName: data.targetName || '',
-          performedBy: data.performedBy || '',
-          details: data.details || null
+          performedBy: data.performedBy || ''
         };
 
         setLatestActivity(activity);
