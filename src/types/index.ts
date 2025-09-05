@@ -164,11 +164,18 @@ export interface CenterSession {
 // سجل أنشطة المركز
 export interface CenterActivityLog {
   id: string;
+  centerId: string;
+  userId: string;
+  userName: string;
   timestamp: Date;
-  activityType: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'login' | 'logout';
   action: string; // وصف العملية
-  targetId?: string; // معرف السجل المتأثر
-  targetName?: string; // اسم السجل المتأثر
-  performedBy: string; // البريد الإلكتروني للمستخدم
+  description: string;
+  type: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'session' | 'other';
   details?: any; // تفاصيل إضافية
+  
+  // للتوافق مع النسخة القديمة
+  activityType?: 'inventory' | 'sales' | 'maintenance' | 'customer' | 'technician' | 'login' | 'logout';
+  targetId?: string;
+  targetName?: string;
+  performedBy?: string;
 }

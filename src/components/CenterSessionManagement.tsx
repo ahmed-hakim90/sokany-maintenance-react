@@ -137,17 +137,43 @@ const CenterSessionManagement: React.FC = () => {
         details: details || null
       };
 
+      // تسجيل في أنشطة المركز
       await addDoc(
         collection(db, 'centers', user.centerId, 'activities'),
         activityData
       );
 
-      // إضافة النشاط للجلسة الحالية
-      const updatedActivities = [...activities];
-      updatedActivities.unshift({
+      // تسجيل في الأنشطة العمومية للمسؤول الرئيسي
+      await addDoc(
+        collection(db, 'globalActivities'),
+        {
+          ...activityData,
+          centerId: user.centerId,
+          centerName: user.centerName || 'غير محدد'
+        }
+      );
+
+      // إضافة النشاط للجلسة الحالية - إنشاء كائن جديد بالمعلومات الأساسية
+      const displayActivity: CenterActivityLog = {
         id: Date.now().toString(),
-        ...activityData
-      });
+        centerId: user.centerId,
+        userId: user.uid || user.email || '',
+        userName: user.email?.split('@')[0] || 'مستخدم غير معروف',
+        timestamp: activityData.timestamp,
+        action: activityData.action,
+        description: activityData.action,
+        type: (activityData.activityType || 'other') as any,
+        details: activityData.details,
+        
+        // الخصائص الإضافية للتوافق
+        activityType: activityData.activityType,
+        targetId: activityData.targetId,
+        targetName: activityData.targetName,
+        performedBy: activityData.performedBy
+      };
+      
+      const updatedActivities = [...activities];
+      updatedActivities.unshift(displayActivity);
       setActivities(updatedActivities.slice(0, 50)); // الاحتفاظ بآخر 50 نشاط فقط
 
     } catch (error) {
@@ -183,7 +209,7 @@ const CenterSessionManagement: React.FC = () => {
     }
   };
 
-  const getActivityIcon = (type: CenterActivityLog['activityType']) => {
+  const getActivityIcon = (type: string) => {
     switch (type) {
       case 'inventory': return 'fas fa-boxes';
       case 'sales': return 'fas fa-shopping-cart';
@@ -192,11 +218,12 @@ const CenterSessionManagement: React.FC = () => {
       case 'technician': return 'fas fa-user-cog';
       case 'login': return 'fas fa-sign-in-alt';
       case 'logout': return 'fas fa-sign-out-alt';
+      case 'session': return 'fas fa-clock';
       default: return 'fas fa-info-circle';
     }
   };
 
-  const getActivityTypeLabel = (type: CenterActivityLog['activityType']) => {
+  const getActivityTypeLabel = (type: string) => {
     switch (type) {
       case 'inventory': return 'المخزون';
       case 'sales': return 'المبيعات';
@@ -205,16 +232,18 @@ const CenterSessionManagement: React.FC = () => {
       case 'technician': return 'الفنيين';
       case 'login': return 'دخول';
       case 'logout': return 'خروج';
+      case 'session': return 'الجلسة';
       default: return 'عام';
     }
   };
 
   const filteredActivities = activities.filter(activity => {
-    const matchesType = filterType === 'all' || activity.activityType === filterType;
+    const activityType = activity.activityType || activity.type || 'other';
+    const matchesType = filterType === 'all' || activityType === filterType;
     const matchesSearch = searchTerm === '' || 
       activity.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
       activity.targetName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      activity.performedBy.toLowerCase().includes(searchTerm.toLowerCase());
+      (activity.performedBy || activity.userName || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesType && matchesSearch;
   });
@@ -303,10 +332,13 @@ const CenterSessionManagement: React.FC = () => {
                 <p>لا توجد أنشطة للعرض</p>
               </div>
             ) : (
-              filteredActivities.map(activity => (
+              filteredActivities.map(activity => {
+                const activityType = activity.activityType || activity.type || 'other';
+                const performedBy = activity.performedBy || activity.userName || 'مستخدم غير معروف';
+                return (
                 <div key={activity.id} className="activity-item">
                   <div className="activity-icon">
-                    <i className={getActivityIcon(activity.activityType)}></i>
+                    <i className={getActivityIcon(activityType)}></i>
                   </div>
                   <div className="activity-content">
                     <div className="activity-main">
@@ -316,13 +348,13 @@ const CenterSessionManagement: React.FC = () => {
                       )}
                     </div>
                     <div className="activity-meta">
-                      <span className="activity-type">{getActivityTypeLabel(activity.activityType)}</span>
-                      <span className="activity-user">{activity.performedBy}</span>
+                      <span className="activity-type">{getActivityTypeLabel(activityType)}</span>
+                      <span className="activity-user">{performedBy}</span>
                       <span className="activity-time">{activity.timestamp.toLocaleString('ar-EG')}</span>
                     </div>
                   </div>
                 </div>
-              ))
+              );})
             )}
           </div>
         </div>
@@ -336,7 +368,7 @@ export const useActivityLogger = () => {
   const { user } = useAuth();
 
   const logActivity = async (
-    activityType: CenterActivityLog['activityType'],
+    type: string, // تغيير من activityType إلى type
     action: string,
     targetId?: string,
     targetName?: string,
@@ -347,18 +379,35 @@ export const useActivityLogger = () => {
 
     try {
       const activityData = {
+        centerId: user.centerId,
+        userId: user.uid || user.email, 
+        userName: user.email?.split('@')[0] || 'مستخدم غير معروف',
         timestamp: customTimestamp || new Date(),
-        activityType,
+        type,
         action,
+        description: `${action} - ${targetName || targetId || ''}`,
+        details: details || null,
+        
+        // للتوافق مع النسخة القديمة
+        activityType: type as any,
         targetId: targetId || '',
         targetName: targetName || '',
-        performedBy: user.email || '',
-        details: details || null
+        performedBy: user.email || ''
       };
 
+      // تسجيل في أنشطة المركز
       await addDoc(
         collection(db, 'centers', user.centerId, 'activities'),
         activityData
+      );
+
+      // تسجيل في الأنشطة العمومية للمسؤول الرئيسي
+      await addDoc(
+        collection(db, 'globalActivities'),
+        {
+          ...activityData,
+          centerName: user.centerName || 'غير محدد'
+        }
       );
     } catch (error) {
       console.error('Error logging activity:', error);

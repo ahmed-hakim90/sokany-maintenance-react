@@ -12,10 +12,12 @@ const TechnicianManagement: React.FC = () => {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTechnician, setEditingTechnician] = useState<Technician | null>(null);
   const [selectedTechnicianStats, setSelectedTechnicianStats] = useState<any>(null);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -27,15 +29,34 @@ const TechnicianManagement: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
       await Promise.all([loadTechnicians(), loadCenters()]);
+      setDataLoaded(true);
+      
+      if (isRefresh) {
+        showNotification('تم تحديث البيانات بنجاح', 'success');
+      }
     } catch (error) {
       showNotification('حدث خطأ في تحميل البيانات', 'error');
+      console.error('Error loading data:', error);
     } finally {
-      setLoading(false);
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = () => {
+    loadData(true);
   };
 
   const loadTechnicians = async () => {
@@ -280,11 +301,14 @@ const TechnicianManagement: React.FC = () => {
     return center?.name || 'غير محدد';
   };
 
-  if (loading) {
+  if (loading && !dataLoaded) {
     return (
       <div className="loading-screen">
-        <i className="fas fa-spinner fa-spin"></i>
-        <p>جاري تحميل الفنيين...</p>
+        <div className="loading-content">
+          <i className="fas fa-spinner fa-spin"></i>
+          <p>جاري تحميل الفنيين...</p>
+          <small>يتم تحميل بيانات الفنيين من جميع المراكز</small>
+        </div>
       </div>
     );
   }
@@ -296,18 +320,73 @@ const TechnicianManagement: React.FC = () => {
           <i className="fas fa-users-cog"></i>
           إدارة الفنيين
         </h1>
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddForm(true)}
-        >
-          <i className="fas fa-plus"></i>
-          إضافة فني جديد
-        </button>
+        <div className="header-actions">
+          <button 
+            className="btn btn-secondary"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="تحديث البيانات"
+          >
+            <i className={`fas fa-sync-alt ${refreshing ? 'fa-spin' : ''}`}></i>
+            {refreshing ? 'جاري التحديث...' : 'تحديث'}
+          </button>
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowAddForm(true)}
+          >
+            <i className="fas fa-plus"></i>
+            إضافة فني جديد
+          </button>
+        </div>
       </div>
 
       {notification && (
         <div className={`notification ${notification.type}`}>
           {notification.message}
+        </div>
+      )}
+
+      {/* إحصائيات سريعة */}
+      <div className="technicians-stats">
+        <div className="stat-card">
+          <div className="stat-icon">
+            <i className="fas fa-users-cog"></i>
+          </div>
+          <div className="stat-info">
+            <h3>{technicians.length}</h3>
+            <p>إجمالي الفنيين</p>
+          </div>
+        </div>
+        
+        {user?.isAdmin && (
+          <>
+            <div className="stat-card">
+              <div className="stat-icon">
+                <i className="fas fa-building"></i>
+              </div>
+              <div className="stat-info">
+                <h3>{new Set(technicians.map(t => t.centerId)).size}</h3>
+                <p>المراكز النشطة</p>
+              </div>
+            </div>
+            
+            <div className="stat-card">
+              <div className="stat-icon">
+                <i className="fas fa-chart-line"></i>
+              </div>
+              <div className="stat-info">
+                <h3>{(technicians.length / centers.length || 0).toFixed(1)}</h3>
+                <p>متوسط الفنيين لكل مركز</p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {refreshing && (
+        <div className="refresh-indicator">
+          <i className="fas fa-sync-alt fa-spin"></i>
+          <span>جاري تحديث البيانات...</span>
         </div>
       )}
 
@@ -391,8 +470,25 @@ const TechnicianManagement: React.FC = () => {
       <div className="technicians-grid">
         {technicians.length === 0 ? (
           <div className="no-data">
-            <i className="fas fa-user-cog"></i>
-            <p>لا توجد فنيين مضافين بعد</p>
+            <div className="no-data-icon">
+              <i className="fas fa-user-cog"></i>
+            </div>
+            <div className="no-data-content">
+              <h3>لا توجد فنيين مضافين بعد</h3>
+              <p>
+                {user?.isAdmin 
+                  ? 'لم يتم إضافة أي فنيين في جميع المراكز حتى الآن'
+                  : 'لم يتم إضافة أي فنيين في هذا المركز حتى الآن'
+                }
+              </p>
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowAddForm(true)}
+              >
+                <i className="fas fa-plus"></i>
+                إضافة أول فني
+              </button>
+            </div>
           </div>
         ) : (
           technicians.map(technician => (
