@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +29,14 @@ const TechnicianManagement: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.pathname.endsWith('/create') && location.pathname.startsWith('/technicians')) {
+      setShowAddForm(true);
+    }
+  }, [location.pathname]);
 
   const loadData = async (isRefresh = false) => {
     try {
@@ -332,7 +341,7 @@ const TechnicianManagement: React.FC = () => {
           </button>
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddForm(true)}
+            onClick={() => { setShowAddForm(true); try { navigate('/technicians/create'); } catch {} }}
           >
             <i className="fas fa-plus"></i>
             إضافة فني جديد

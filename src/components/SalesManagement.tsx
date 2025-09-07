@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy, 
-  updateDoc, 
-  doc
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import adapter from '../config/firebase';
+const { db } = adapter;
+import useStats from '../hooks/useStats';
 import { useAuth } from '../contexts/AuthContext';
 import { useActivityLogger } from './CenterSessionManagement';
 import type { Sale, InventoryItem, Customer } from '../types';
@@ -40,6 +33,8 @@ const SalesManagement: React.FC = () => {
     type: 'success' | 'error';
   } | null>(null);
 
+  const { stats, refresh: refreshStats } = useStats(user?.centerId);
+
   const [newSale, setNewSale] = useState<NewSale>({
     itemId: '',
     itemName: '',
@@ -60,6 +55,14 @@ const SalesManagement: React.FC = () => {
     updateLastActivity();
   }, [user]);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.pathname.endsWith('/create') && location.pathname.startsWith('/sales')) {
+      setShowAddForm(true);
+    }
+  }, [location.pathname]);
+
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -68,35 +71,17 @@ const SalesManagement: React.FC = () => {
   const loadSales = async () => {
     try {
       setLoading(true);
-      let salesQuery;
-
+      let rows: any[] = [];
       if (user?.isAdmin) {
-        salesQuery = query(
-          collection(db, 'sales'),
-          orderBy('date', 'desc')
-        );
+        rows = await db.getDocs('sales', { orderBy: { field: 'date', ascending: false } });
       } else if (user?.centerId) {
-        // استعلام بدون orderBy لتجنب الحاجة إلى فهرس مركب ثم فرز محلي
-        salesQuery = query(
-          collection(db, 'sales'),
-          where('centerId', '==', user.centerId)
-        );
+        rows = await db.getDocs('sales', { eq: { field: 'centerId', value: user.centerId } });
       } else {
         setSales([]);
         return;
       }
-
-      const snapshot = await getDocs(salesQuery);
-      let salesData: Sale[] = [];
-      snapshot.forEach(d => {
-        salesData.push({ id: d.id, ...d.data() } as Sale);
-      });
-      // فرز محلي إذا لم نستخدم orderBy في الاستعلام
-      salesData.sort((a, b) => {
-        const da = (a.date as any)?.toDate ? (a.date as any).toDate() : new Date(a.date);
-        const dbb = (b.date as any)?.toDate ? (b.date as any).toDate() : new Date(b.date);
-        return dbb.getTime() - da.getTime();
-      });
+      const salesData: Sale[] = rows.map(r => ({ id: r.id, ...r } as Sale));
+      salesData.sort((a, b) => new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime());
       setSales(salesData);
     } catch (error: any) {
       console.error('Error loading sales:', error);
@@ -118,11 +103,8 @@ const SalesManagement: React.FC = () => {
 
       // احصل على جميع المراكز (للأدمن أو لتسمية مركز المستخدم فقط)
       const centersMap: Record<string, string> = {};
-      const centersSnapshot = await getDocs(collection(db, 'centers'));
-      centersSnapshot.forEach(c => {
-        const data: any = c.data();
-        centersMap[c.id] = data.name || 'مركز غير معروف';
-      });
+  const centers = await db.getDocs('centers');
+  centers.forEach((c: any) => { centersMap[c.id || c.id] = c.name || 'مركز غير معروف'; });
 
       console.log('=== تشخيص تحميل المخزون ===');
       console.log('المستخدم:', user?.email, 'نوع:', user?.isAdmin ? 'أدمن' : 'مركز');
@@ -131,40 +113,23 @@ const SalesManagement: React.FC = () => {
 
       if (user?.isAdmin) {
         console.log('تحميل المخزون للأدمن من جميع المراكز');
-        for (const centerDoc of centersSnapshot.docs) {
-          console.log(`\n--- فحص المركز: ${centerDoc.id} (${centersMap[centerDoc.id]}) ---`);
-          
-          const inventorySnapshot = await getDocs(
-            collection(db, 'centers', centerDoc.id, 'inventory')
-          );
-          console.log(`عدد العناصر في هذا المركز: ${inventorySnapshot.size}`);
-          
-          inventorySnapshot.forEach(inv => {
-            const data: any = inv.data();
-            console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
+        for (const centerDoc of centers) {
+          const centerId = centerDoc.id || centerDoc.id;
+          const inventoryRows = await db.getDocs('inventory', { eq: { field: 'center_id', value: centerId } });
+          inventoryRows.forEach((inv: any) => {
             items.push({ 
               id: inv.id, 
-              ...data, 
-              centerId: centerDoc.id, // تأكد من إضافة centerId الصحيح
-              centerName: centersMap[centerDoc.id] 
+              ...inv, 
+              centerId: centerId,
+              centerName: centersMap[centerId]
             } as InventoryItem);
           });
         }
       } else if (user?.centerId) {
         console.log('تحميل المخزون لمركز:', user.centerId);
-        const inventorySnapshot = await getDocs(
-          collection(db, 'centers', user.centerId, 'inventory')
-        );
-        console.log(`المركز ${user.centerId}: ${inventorySnapshot.size} عناصر`);
-        inventorySnapshot.forEach(inv => {
-          const data: any = inv.data();
-          console.log(`العنصر: ${data.name}, الكمية: ${data.quantity}, centerId في البيانات: ${data.centerId}`);
-          items.push({ 
-            id: inv.id, 
-            ...data, 
-            centerId: user.centerId!, // تأكد من إضافة centerId الصحيح
-            centerName: centersMap[user.centerId!] 
-          } as InventoryItem);
+        const inventoryRows = await db.getDocs('inventory', { eq: { field: 'center_id', value: user.centerId } });
+        inventoryRows.forEach((inv: any) => {
+          items.push({ id: inv.id, ...inv, centerId: user.centerId!, centerName: centersMap[user.centerId!] } as InventoryItem);
         });
       }
 
@@ -196,36 +161,16 @@ const SalesManagement: React.FC = () => {
       let customersData: Customer[] = [];
       
       if (user?.isAdmin) {
-        const centersSnapshot = await getDocs(collection(db, 'centers'));
-        for (const centerDoc of centersSnapshot.docs) {
-          const customersSnapshot = await getDocs(
-            collection(db, 'centers', centerDoc.id, 'customers')
-          );
-          customersSnapshot.forEach(doc => {
-            const data = doc.data();
-            customersData.push({
-              id: doc.id,
-              ...data,
-              centerId: centerDoc.id,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date()
-            } as Customer);
+        const centers = await db.getDocs('centers');
+        for (const centerDoc of centers) {
+          const customersRows = await db.getDocs('customers', { eq: { field: 'center_id', value: centerDoc.id } });
+          customersRows.forEach((r: any) => {
+            customersData.push({ id: r.id, ...r, centerId: centerDoc.id, createdAt: new Date(), updatedAt: new Date() } as Customer);
           });
         }
       } else if (user?.centerId) {
-        const customersSnapshot = await getDocs(
-          collection(db, 'centers', user.centerId, 'customers')
-        );
-        customersSnapshot.forEach(doc => {
-          const data = doc.data();
-          customersData.push({
-            id: doc.id,
-            ...data,
-            centerId: user.centerId,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date()
-          } as Customer);
-        });
+        const customersRows = await db.getDocs('customers', { eq: { field: 'center_id', value: user.centerId } });
+        customersRows.forEach((r: any) => customersData.push({ id: r.id, ...r, centerId: user.centerId, createdAt: new Date(), updatedAt: new Date() } as Customer));
       }
       
       setCustomers(customersData);
@@ -287,7 +232,8 @@ const SalesManagement: React.FC = () => {
         createdAt: new Date()
       };
 
-      const docRef = await addDoc(collection(db, 'sales'), saleData);
+  const created = await db.addDoc('sales', saleData);
+  const docRef = { id: created?.id } as any;
 
       // تسجيل النشاط
       await logActivity(
@@ -303,20 +249,18 @@ const SalesManagement: React.FC = () => {
       );
 
       // تحديث كمية المنتج في المخزون
-      const newQuantity = selectedItem.quantity - newSale.quantity;
-      await updateDoc(
-        doc(db, 'centers', selectedItem.centerId, 'inventory', selectedItem.id),
-        {
-          quantity: newQuantity,
-          updatedAt: new Date()
-        }
-      );
+  const newQuantity = selectedItem.quantity - newSale.quantity;
+  await db.updateDoc('inventory', 'id', selectedItem.id, { quantity: newQuantity, updatedAt: new Date() });
+
+  // bump dataVersion to notify listeners
+  localStorage.setItem('dataVersion', String(Date.now()));
+  refreshStats();
 
       showNotification('تم إضافة المبيعة بنجاح', 'success');
       setShowAddForm(false);
       resetForm();
-      loadSales();
-      loadInventoryItems();
+  loadSales();
+  loadInventoryItems();
     } catch (error) {
       console.error('Error adding sale:', error);
       showNotification('خطأ في إضافة عملية البيع', 'error');
@@ -388,7 +332,8 @@ const SalesManagement: React.FC = () => {
               className="btn-primary"
               onClick={() => {
                 setShowAddForm(true);
-                loadInventoryItems(); // تحديث المخزون عند فتح النموذج
+                loadInventoryItems(); // تحديد المخزون عند فتح النموذج
+                try { navigate('/sales/create'); } catch {}
               }}
             >
               <i className="fas fa-plus"></i>

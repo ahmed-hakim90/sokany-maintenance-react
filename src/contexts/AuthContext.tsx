@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  signOut
-} from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import adapter from '../config/firebase';
+// adapter exposes { auth, db } backed by Supabase via the adapter
+const { auth, db } = adapter;
 import type { AuthState, User } from '../types';
 
 interface AuthContextType extends AuthState {
@@ -61,15 +59,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
 
-      // جلب بيانات المركز
-      const centerRef = doc(db, 'centers', centerId);
-      const centerSnap = await getDoc(centerRef);
-      if (!centerSnap.exists()) {
+      // جلب بيانات المركز من جدول centers
+      const centers = await db.getDocs('centers', { eq: { field: 'id', value: centerId }, limit: 1 });
+      const centerData: any = centers && centers.length ? centers[0] : null;
+      if (!centerData) {
         throw new Error('المركز غير موجود');
       }
-      const centerData: any = centerSnap.data();
 
-      // التحقق من البريد وكلمة المرور المخزنة في وثيقة المركز (نظام مراكز بسيط)
+      // التحقق من البريد وكلمة المرور المخزنة في صف المركز (نظام مراكز بسيط)
       if (centerData.email !== email) {
         throw new Error('البريد الإلكتروني غير مطابق للمركز');
       }
@@ -86,6 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         centerId,
         centerName: centerData.name,
         isAdmin: false,
+        role: centerData.role || 'Service Center',
+        permissions: centerData.permissions || { Sales: true, Maintenance: true, Technicians: true, Inventory: true },
         lastLogin: new Date().toISOString()
       };
 
@@ -113,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uid: 'admin',
         email: 'admin@system.com',
         isAdmin: true,
+        role: 'Admin',
+        permissions: { Sales: true, Maintenance: true, Technicians: true, Inventory: true },
         lastLogin: new Date().toISOString()
       };
 
@@ -137,7 +138,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      if (auth && auth.signOut) {
+        await auth.signOut();
+      }
       localStorage.clear();
       setState({
         user: null,

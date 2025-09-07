@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../config/firebase';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { useNavigate, useLocation } from 'react-router-dom';
+import adapter from '../config/firebase';
+const { db } = adapter;
 import { useAuth } from '../contexts/AuthContext';
 import InventoryManagement from './InventoryManagement';
 import CenterManagement from './CenterManagement';
@@ -40,13 +41,9 @@ const Dashboard: React.FC = () => {
           }
         }
         if (user.centerId) {
-          const snap = await getDoc(doc(db, 'centers', user.centerId));
-          if (snap.exists()) {
-            const data: any = snap.data();
-            if (data.managerName) {
-              setEmployeeName(data.managerName);
-            }
-          }
+          const rows = await db.getDocs('centers', { eq: { field: 'id', value: user.centerId }, limit: 1 });
+          const data: any = rows && rows.length ? rows[0] : null;
+          if (data?.managerName) setEmployeeName(data.managerName);
         }
       } catch (e) {
         console.warn('تعذر جلب اسم الموظف:', e);
@@ -54,6 +51,41 @@ const Dashboard: React.FC = () => {
     };
     loadManagerName();
   }, [user]);
+
+  // Router integration: navigate when sections change and restore section from URL
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const sectionToPath = (section: string) => {
+    switch (section) {
+      case 'inventory': return '/products';
+      case 'sales': return '/sales';
+      case 'maintenance': return '/maintenance';
+      case 'technicians': return '/technicians';
+      case 'customers': return '/users';
+      case 'centers': return '/service-centers';
+      case 'reports': return '/reports';
+      case 'activities': return '/reports';
+      default: return '/';
+    }
+  };
+
+  const pathToSection = (path: string) => {
+    if (path.startsWith('/products') || path.startsWith('/inventory')) return 'inventory';
+    if (path.startsWith('/sales')) return 'sales';
+    if (path.startsWith('/maintenance')) return 'maintenance';
+    if (path.startsWith('/technicians')) return 'technicians';
+    if (path.startsWith('/users') || path.startsWith('/customers')) return 'customers';
+    if (path.startsWith('/service-centers') || path.startsWith('/centers')) return 'centers';
+    if (path.startsWith('/reports')) return 'reports';
+    return 'dashboard';
+  };
+
+  useEffect(() => {
+    // keep internal activeSection in sync with the current URL on load / navigation
+    const s = pathToSection(location.pathname);
+    setActiveSection(s);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     try {
@@ -66,6 +98,12 @@ const Dashboard: React.FC = () => {
   const handleNavigation = (section: string) => {
     setActiveSection(section);
     updateLastActivity();
+    try {
+      const path = sectionToPath(section);
+      navigate(path);
+    } catch (e) {
+      // ignore navigation errors
+    }
   };
 
   const handleSearch = async (searchTerm: string) => {

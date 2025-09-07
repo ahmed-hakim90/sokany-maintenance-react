@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -31,6 +32,14 @@ const CenterManagement: React.FC = () => {
       loadCenters();
     }
   }, [currentUser]);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.pathname.endsWith('/create') && location.pathname.startsWith('/service-centers')) {
+      setShowAddForm(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (centers.length > 0) {
@@ -234,7 +243,7 @@ const CenterManagement: React.FC = () => {
         <div className="header-actions">
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddForm(true)}
+            onClick={() => { setShowAddForm(true); try { navigate('/service-centers/create'); } catch {} }}
           >
             <i className="fas fa-plus"></i>
             إضافة مركز جديد

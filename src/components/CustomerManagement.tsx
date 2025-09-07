@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,6 +28,15 @@ const CustomerManagement: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Open modal when URL matches /users/create (or /customers/create)
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.pathname.endsWith('/create') && (location.pathname.startsWith('/users') || location.pathname.startsWith('/customers'))) {
+      setShowAddForm(true);
+    }
+  }, [location.pathname]);
 
   const loadData = async () => {
     try {
@@ -373,7 +383,7 @@ const CustomerManagement: React.FC = () => {
         </h1>
         <button 
           className="btn btn-primary"
-          onClick={() => setShowAddForm(true)}
+          onClick={() => { setShowAddForm(true); try { navigate('/users/create'); } catch {} }}
         >
           <i className="fas fa-plus"></i>
           إضافة عميل جديد
